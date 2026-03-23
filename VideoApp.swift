@@ -43,7 +43,7 @@ struct FullScreenVideoView: View {
     @State private var isLoading = true
     @State private var errorMsg = ""
     
-    // ✅ 正确接口（带 type=video，必加！）
+    // 正确接口（带 type=video 参数）
     let apiUrl = "https://api.yujn.cn/api/zzxjj.php?type=video"
 
     var body: some View {
@@ -82,7 +82,7 @@ struct FullScreenVideoView: View {
         URLSession.shared.dataTask(with: url) { data, response, err in
             DispatchQueue.main.async {
                 if let data = data,
-                   let str = String(data: data, .utf8) {
+                   let str = String(data: data, encoding: .utf8) { // ✅ 修复语法：补全 encoding:
                     let clean = str.trimmingCharacters(in: .whitespacesAndNewlines)
                     if clean.isEmpty {
                         errorMsg = "接口返回空内容"
