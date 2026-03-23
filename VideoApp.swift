@@ -13,17 +13,12 @@ struct VideoApp: App {
 // 欢迎界面 By 喜爱民谣
 struct SplashView: View {
     @State private var showVideo = false
-    
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             VStack(spacing: 20) {
-                Text("欢迎使用")
-                    .font(.title)
-                    .foregroundColor(.white)
-                Text("By 喜爱民谣")
-                    .font(.title)
-                    .foregroundColor(.gray)
+                Text("欢迎使用").font(.title).foregroundColor(.white)
+                Text("By 喜爱民谣").font(.title).foregroundColor(.gray)
             }
         }
         .onAppear {
@@ -32,87 +27,98 @@ struct SplashView: View {
             }
         }
         .fullScreenCover(isPresented: $showVideo) {
-            FullScreenVideoView()
+            VideoFeedView()
         }
     }
 }
 
-// 🔥 修复网络失败 + 强制播放视频
-struct FullScreenVideoView: View {
+// 主视频列表（上滑返回 + 下滑刷新新视频）
+struct VideoFeedView: View {
+    @State private var videoHistory: [URL] = []
+    @State private var currentIndex = 0
     @State private var player: AVPlayer?
-    @State private var isLoading = true
-    @State private var errorMsg = ""
+    @State private var isLoading = false
     
-    // 你的真实视频接口
-    let apiUrl = "https://api.yujn.cn/api/zzxjj.php?type=video"
-
+    let apiURL = "https://api.yujn.cn/api/zzxjj.php?type=video"
+    
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            if isLoading {
-                VStack(spacing: 16) {
-                    ProgressView().tint(.white).scaleEffect(1.5)
-                    Text("加载视频中...").foregroundColor(.white)
-                }
-            } else if !errorMsg.isEmpty {
-                Text(errorMsg)
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                    .onTapGesture {
-                        loadVideo() // 失败可点击重试
-                    }
-            } else if let player = player {
+            if let player = player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
-                    .onTapGesture {
-                        player.timeControlStatus == .playing ? player.pause() : player.play()
-                    }
-                    .onAppear {
-                        player.play()
-                    }
+                    .onAppear { player.play() }
+            }
+            
+            if isLoading {
+                ProgressView().tint(.white).scaleEffect(1.5)
             }
         }
+        .ignoresSafeArea()
+        .gesture(
+            DragGesture().onEnded { g in
+                if g.translation.height < -150 {
+                    loadNewVideo()
+                }
+                if g.translation.height > 150 {
+                    goBack()
+                }
+            }
+        )
+        .onTapGesture {
+            guard let p = player else { return }
+            p.timeControlStatus == .playing ? p.pause() : p.play()
+        }
+        .onAppear(perform: loadFirstVideo)
         .preferredColorScheme(.dark)
-        .onAppear(perform: loadVideo)
     }
     
-    private func loadVideo() {
+    // 首次加载
+    private func loadFirstVideo() {
+        if videoHistory.isEmpty {
+            loadNewVideo()
+        }
+    }
+    
+    // 下滑 → 加载新视频
+    private func loadNewVideo() {
         isLoading = true
-        errorMsg = ""
+        guard let reqUrl = URL(string: apiURL) else {
+            isLoading = false
+            return
+        }
         
-        var request = URLRequest(url: URL(string: apiUrl)!)
-        request.timeoutInterval = 15
-        
-        // 修复：允许任意请求 + 超时 + 重试机制
-        URLSession.shared.dataTask(with: request) { data, resp, err in
+        URLSession.shared.dataTask(with: reqUrl) { data, _, _ in
             DispatchQueue.main.async {
-                if let err = err {
-                    errorMsg = "网络错误：\(err.localizedDescription)"
+                guard let data = data,
+                      let str = String(data: data, encoding: .utf8) else {
                     isLoading = false
                     return
                 }
                 
-                guard let data = data else {
-                    errorMsg = "服务器无返回"
+                let clean = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let videoUrl = URL(string: clean), !clean.isEmpty else {
                     isLoading = false
                     return
                 }
                 
-                if let str = String(data: data, encoding: .utf8) {
-                    let cleanLink = str.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if let videoUrl = URL(string: cleanLink) {
-                        self.player = AVPlayer(url: videoUrl)
-                        self.player?.play()
-                    } else {
-                        errorMsg = "视频链接格式错误"
-                    }
-                } else {
-                    errorMsg = "无法解析返回数据"
-                }
+                player?.pause()
+                player = AVPlayer(url: videoUrl)
+                videoHistory.append(videoUrl)
+                currentIndex = videoHistory.count - 1
                 isLoading = false
+                player?.play()
             }
         }.resume()
+    }
+    
+    // 上滑 → 返回上一个视频
+    private func goBack() {
+        guard currentIndex > 0 else { return }
+        currentIndex -= 1
+        player?.pause()
+        player = AVPlayer(url: videoHistory[currentIndex])
+        player?.play()
     }
 }
