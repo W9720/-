@@ -36,21 +36,19 @@ jobs:
                 IPHONEOS_DEPLOYMENT_TARGET: 15.0
                 PRODUCT_NAME: VideoApp
                 EXECUTABLE_NAME: VideoApp
+                PRODUCT_BUNDLE_IDENTIFIER: com.video.app
+                SWIFT_VERSION: 5.0
+                TARGETED_DEVICE_FAMILY: 1
           EOF
           xcodegen generate
 
       - name: Build
         run: xcodebuild build -scheme VideoApp -destination 'generic/platform=iOS' -quiet
 
-      - name: Verify App Bundle
-        run: ls -la ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphoneos/VideoApp.app/
-
       - name: Make IPA
         run: |
           mkdir -p Payload
           cp -r ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphoneos/VideoApp.app Payload/
-          # 确认主二进制存在
-          ls -la Payload/VideoApp.app/
           zip -r VideoApp-TrollStore.ipa Payload/
 
       - uses: actions/upload-artifact@v4
