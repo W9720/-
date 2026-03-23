@@ -1,4 +1,4 @@
-name: Build iOS Unsigned IPA
+name: Build iOS Unsigned IPA (TrollStore)
 
 on:
   push:
@@ -11,49 +11,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Build Unsigned IPA
+        uses: yukiarrr/ios-build-action@v1.6.0
+        with:
+          project-path: .
+          scheme: VideoApp
+          output-path: VideoApp-TrollStore.ipa
+          code-sign-identity: ""
+          code-signing-required: false
+          export-options: |
+            {
+              "method": "enterprise",
+              "signingStyle": "manual"
+            }
 
-      - name: Generate Xcode Project
-        run: |
-          cat > project.yml << 'EOF'
-          name: VideoApp
-          options:
-            minimumOSVersion: 15.0
-          targets:
-            VideoApp:
-              type: application
-              platform: iOS
-              sources:
-                - path: .
-                  excludes:
-                    - .git
-                    - .github
-              settings:
-                CODE_SIGN_IDENTITY: ""
-                CODE_SIGNING_REQUIRED: NO
-                CODE_SIGNING_ALLOWED: NO
-                IPHONEOS_DEPLOYMENT_TARGET: 15.0
-                PRODUCT_NAME: VideoApp
-                EXECUTABLE_NAME: VideoApp
-          EOF
-          xcodegen generate
-
-      - name: Build
-        run: xcodebuild build -scheme VideoApp -destination 'generic/platform=iOS' -quiet
-
-      - name: Verify App Bundle
-        run: ls -la ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphoneos/VideoApp.app/
-
-      - name: Make IPA
-        run: |
-          mkdir -p Payload
-          cp -r ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphoneos/VideoApp.app Payload/
-          # 确认主二进制存在
-          ls -la Payload/VideoApp.app/
-          zip -r VideoApp-TrollStore.ipa Payload/
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
         with:
           name: VideoApp-TrollStore
           path: VideoApp-TrollStore.ipa
