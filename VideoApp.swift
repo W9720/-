@@ -17,15 +17,9 @@ struct SplashView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            
             VStack(spacing: 20) {
-                Text("欢迎使用")
-                    .font(.title)
-                    .foregroundColor(.white)
-                
-                Text("By 喜爱民谣")
-                    .font(.title)
-                    .foregroundColor(.gray)
+                Text("欢迎使用").font(.title).foregroundColor(.white)
+                Text("By 喜爱民谣").font(.title).foregroundColor(.gray)
             }
         }
         .onAppear {
@@ -55,7 +49,6 @@ struct FullScreenVideoView: View {
                 ForEach(0..<videos.count, id: \.self) { index in
                     ZStack {
                         Color.black.ignoresSafeArea()
-                        
                         if players.indices.contains(index) {
                             VideoPlayer(player: players[index])
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -80,25 +73,13 @@ struct FullScreenVideoView: View {
             .background(.black)
             .ignoresSafeArea()
             
-            // 点击暂停/播放
-            Color.clear
-                .ignoresSafeArea()
-                .onTapGesture {
-                    togglePlayPause()
-                }
+            Color.clear.ignoresSafeArea().onTapGesture { togglePlayPause() }
             
-            // 加载动画
             if isLoading {
-                ProgressView("加载视频中...")
-                    .foregroundColor(.white)
-                    .scaleEffect(1.5)
+                ProgressView("加载视频中...").foregroundColor(.white).scaleEffect(1.5)
             }
-            
-            // 暂停图标
             if !isPlaying && !isLoading {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 50))
-                    .foregroundColor(.white.opacity(0.8))
+                Image(systemName: "play.fill").font(.system(size: 50)).foregroundColor(.white.opacity(0.8))
             }
         }
         .onAppear(perform: loadVideos)
@@ -114,13 +95,10 @@ struct FullScreenVideoView: View {
     private func loadVideos() {
         isLoading = true
         guard let url = URL(string: apiURL) else { return }
-        
         URLSession.shared.dataTask(with: url) { data, _, err in
             DispatchQueue.main.async {
                 isLoading = false
-                guard let data = data,
-                      let str = String(data: data, encoding: .utf8) else { return }
-                
+                guard let data = data, let str = String(data: data, encoding: .utf8) else { return }
                 let cleanLink = str.trimmingCharacters(in: .whitespacesAndNewlines)
                 if let videoURL = URL(string: cleanLink) {
                     videos = [videoURL, videoURL, videoURL, videoURL, videoURL]
