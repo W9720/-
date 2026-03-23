@@ -4,6 +4,12 @@
 <dict>
     <key>CFBundleDisplayName</key>
     <string>小姐姐短视频</string>
+    <key>CFBundleExecutable</key>
+    <string>VideoApp</string> <!-- 必须和编译脚本里的EXECUTABLE_NAME一致 -->
+    <key>CFBundleIdentifier</key>
+    <string>com.video.app</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
     <key>MinimumOSVersion</key>
     <string>15.0</string>
     <key>NSAppTransportSecurity</key>
