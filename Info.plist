@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDisplayName</key>
-    <string>小姐姐短视频</string>
+    <string>短视频</string>
     <key>CFBundleExecutable</key>
-    <string>VideoApp</string> <!-- 必须和编译脚本里的EXECUTABLE_NAME一致 -->
+    <string>VideoApp</string>
     <key>CFBundleIdentifier</key>
-    <string>com.video.app</string>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>MinimumOSVersion</key>
@@ -16,6 +16,10 @@
     <dict>
         <key>NSAllowsArbitraryLoads</key>
         <true/>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
     </dict>
+    <key>UIRequiresFullScreen</key>
+    <true/>
 </dict>
 </plist>
