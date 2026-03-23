@@ -34,19 +34,26 @@ jobs:
                 CODE_SIGNING_REQUIRED: NO
                 CODE_SIGNING_ALLOWED: NO
                 IPHONEOS_DEPLOYMENT_TARGET: 15.0
+                PRODUCT_NAME: VideoApp
+                EXECUTABLE_NAME: VideoApp
           EOF
           xcodegen generate
 
       - name: Build
         run: xcodebuild build -scheme VideoApp -destination 'generic/platform=iOS' -quiet
 
+      - name: Verify App Bundle
+        run: ls -la ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphoneos/VideoApp.app/
+
       - name: Make IPA
         run: |
-          mkdir Payload
+          mkdir -p Payload
           cp -r ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphoneos/VideoApp.app Payload/
-          zip -r VideoApp.ipa Payload/
+          # 确认主二进制存在
+          ls -la Payload/VideoApp.app/
+          zip -r VideoApp-TrollStore.ipa Payload/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VideoApp-iOS15+
-          path: VideoApp.ipa
+          name: VideoApp-TrollStore
+          path: VideoApp-TrollStore.ipa
