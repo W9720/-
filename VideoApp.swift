@@ -41,7 +41,7 @@ struct FullScreenVideoView: View {
     @State private var isPlaying = true
     @State private var isLoading = true
     
-    let apiURL = "https://api.yujn.cn/api/zzxjj.php?type=video"
+    let apiURL = "https://api.yujn.cn/api/zzxjj.php"
     
     var body: some View {
         ZStack {
