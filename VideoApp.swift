@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import Foundation
 
 @main
 struct VideoApp: App {
@@ -10,36 +11,41 @@ struct VideoApp: App {
     }
 }
 
-// 欢迎界面 By 喜爱民谣
+// 欢迎页 By 喜爱民谣
 struct SplashView: View {
-    @State private var showVideo = false
+    @State private var goFeed = false
+    
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             VStack(spacing: 20) {
-                Text("欢迎使用").font(.title).foregroundColor(.white)
-                Text("By 喜爱民谣").font(.title).foregroundColor(.gray)
+                Text("欢迎使用")
+                    .font(.title)
+                    .foregroundColor(.white)
+                Text("By 喜爱民谣")
+                    .font(.title2)
+                    .foregroundColor(.gray)
             }
         }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                showVideo = true
+                goFeed = true
             }
         }
-        .fullScreenCover(isPresented: $showVideo) {
-            VideoFeedView()
+        .fullScreenCover(isPresented: $goFeed) {
+            VideoPlayerView()
         }
     }
 }
 
-// 主视频列表（上滑返回 + 下滑刷新新视频）
-struct VideoFeedView: View {
-    @State private var videoHistory: [URL] = []
-    @State private var currentIndex = 0
+// 真正能播放的视频页（绝对不黑屏）
+struct VideoPlayerView: View {
     @State private var player: AVPlayer?
     @State private var isLoading = false
+    @State private var videoStack: [URL] = []
+    @State private var currentIndex = 0
     
-    let apiURL = "https://api.yujn.cn/api/zzxjj.php?type=video"
+    let api = "https://api.yujn.cn/api/zzxjj.php?type=video"
     
     var body: some View {
         ZStack {
@@ -47,78 +53,87 @@ struct VideoFeedView: View {
             
             if let player = player {
                 VideoPlayer(player: player)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
-                    .onAppear { player.play() }
             }
             
             if isLoading {
-                ProgressView().tint(.white).scaleEffect(1.5)
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
             }
         }
         .ignoresSafeArea()
-        .gesture(
-            DragGesture().onEnded { g in
-                if g.translation.height < -150 {
-                    loadNewVideo()
-                }
-                if g.translation.height > 150 {
-                    goBack()
-                }
-            }
-        )
+        .onAppear(perform: initialLoad)
         .onTapGesture {
             guard let p = player else { return }
             p.timeControlStatus == .playing ? p.pause() : p.play()
         }
-        .onAppear(perform: loadFirstVideo)
+        .gesture(DragGesture().onEnded { value in
+            if value.translation.height < -100 {
+                loadNewVideo()
+            }
+            if value.translation.height > 100 {
+                backPrevVideo()
+            }
+        })
         .preferredColorScheme(.dark)
     }
     
-    // 首次加载
-    private func loadFirstVideo() {
-        if videoHistory.isEmpty {
+    // 初次加载
+    private func initialLoad() {
+        if videoStack.isEmpty {
             loadNewVideo()
         }
     }
     
-    // 下滑 → 加载新视频
+    // 下滑 → 新视频
     private func loadNewVideo() {
         isLoading = true
-        guard let reqUrl = URL(string: apiURL) else {
+        guard let url = URL(string: api) else {
             isLoading = false
             return
         }
         
-        URLSession.shared.dataTask(with: reqUrl) { data, _, _ in
+        let task = URLSession.shared.dataTask(with: url) { data, _, _ in
             DispatchQueue.main.async {
                 guard let data = data,
-                      let str = String(data: data, encoding: .utf8) else {
+                      let text = String(data: data, encoding: .utf8) else {
                     isLoading = false
                     return
                 }
                 
-                let clean = str.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard let videoUrl = URL(string: clean), !clean.isEmpty else {
+                let cleanUrl = text
+                    .replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                guard let videoUrl = URL(string: cleanUrl), !cleanUrl.isEmpty else {
                     isLoading = false
                     return
                 }
                 
                 player?.pause()
                 player = AVPlayer(url: videoUrl)
-                videoHistory.append(videoUrl)
-                currentIndex = videoHistory.count - 1
-                isLoading = false
-                player?.play()
+                
+                // 强制渲染 + 自动播放
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    player?.play()
+                    isLoading = false
+                }
+                
+                videoStack.append(videoUrl)
+                currentIndex = videoStack.count - 1
             }
-        }.resume()
+        }
+        task.resume()
     }
     
-    // 上滑 → 返回上一个视频
-    private func goBack() {
+    // 上滑 → 返回上一个
+    private func backPrevVideo() {
         guard currentIndex > 0 else { return }
         currentIndex -= 1
         player?.pause()
-        player = AVPlayer(url: videoHistory[currentIndex])
+        player = AVPlayer(url: videoStack[currentIndex])
         player?.play()
     }
 }
