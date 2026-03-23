@@ -9,21 +9,40 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Build iOS App
-        run: |
-          xcodebuild -project VideoApp.xcodeproj -scheme VideoApp -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+      - name: Install XcodeGen
+        run: brew install xcodegen
 
-      - name: Package to IPA
+      - name: Generate Xcode Project
         run: |
-          mkdir -p Payload
+          cat > project.yml << 'EOF'
+          name: VideoApp
+          options:
+            minimumOSVersion: 15.0
+          targets:
+            VideoApp:
+              type: application
+              platform: iOS
+              sources:
+                - path: .
+              settings:
+                CODE_SIGN_IDENTITY: ""
+                CODE_SIGNING_REQUIRED: NO
+                CODE_SIGNING_ALLOWED: NO
+          EOF
+          xcodegen generate
+
+      - name: Build
+        run: xcodebuild build -scheme VideoApp -destination 'generic/platform=iOS' -quiet
+
+      - name: Make IPA
+        run: |
+          mkdir Payload
           cp -r ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphoneos/VideoApp.app Payload/
-          zip -r VideoApp-Unsigned.ipa Payload/
+          zip -r VideoApp.ipa Payload/
 
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: VideoApp-iOS15+
-          path: VideoApp-Unsigned.ipa
+          path: VideoApp.ipa
