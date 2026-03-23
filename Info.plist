@@ -7,10 +7,8 @@
     <key>CFBundleExecutable</key>
     <string>VideoApp</string>
     <key>CFBundleIdentifier</key>
-    <string>com.xamy.videoapp</string> <!-- 改成你自己的唯一ID，避免冲突 -->
+    <string>com.xamyvideo.app</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
-    <key>CFBundleShortVersionString</key>
     <string>1.0</string>
     <key>MinimumOSVersion</key>
     <string>15.0</string>
@@ -19,11 +17,5 @@
         <key>NSAllowsArbitraryLoads</key>
         <true/>
     </dict>
-    <key>UIRequiresFullScreen</key>
-    <true/>
-    <key>UISupportedInterfaceOrientations</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-    </array>
 </dict>
 </plist>
