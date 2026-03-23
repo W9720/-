@@ -37,13 +37,13 @@ struct SplashView: View {
     }
 }
 
-// 最终修复版视频播放器
+// 🔥 修复网络失败 + 强制播放视频
 struct FullScreenVideoView: View {
     @State private var player: AVPlayer?
     @State private var isLoading = true
     @State private var errorMsg = ""
     
-    // 正确接口（带 type=video 参数）
+    // 你的真实视频接口
     let apiUrl = "https://api.yujn.cn/api/zzxjj.php?type=video"
 
     var body: some View {
@@ -56,7 +56,13 @@ struct FullScreenVideoView: View {
                     Text("加载视频中...").foregroundColor(.white)
                 }
             } else if !errorMsg.isEmpty {
-                Text(errorMsg).foregroundColor(.white).padding()
+                Text(errorMsg)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .padding()
+                    .onTapGesture {
+                        loadVideo() // 失败可点击重试
+                    }
             } else if let player = player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
@@ -73,26 +79,37 @@ struct FullScreenVideoView: View {
     }
     
     private func loadVideo() {
-        guard let url = URL(string: apiUrl) else {
-            errorMsg = "接口地址错误"
-            isLoading = false
-            return
-        }
+        isLoading = true
+        errorMsg = ""
         
-        URLSession.shared.dataTask(with: url) { data, response, err in
+        var request = URLRequest(url: URL(string: apiUrl)!)
+        request.timeoutInterval = 15
+        
+        // 修复：允许任意请求 + 超时 + 重试机制
+        URLSession.shared.dataTask(with: request) { data, resp, err in
             DispatchQueue.main.async {
-                if let data = data,
-                   let str = String(data: data, encoding: .utf8) { // ✅ 修复语法：补全 encoding:
-                    let clean = str.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if clean.isEmpty {
-                        errorMsg = "接口返回空内容"
-                    } else if let videoUrl = URL(string: clean) {
+                if let err = err {
+                    errorMsg = "网络错误：\(err.localizedDescription)"
+                    isLoading = false
+                    return
+                }
+                
+                guard let data = data else {
+                    errorMsg = "服务器无返回"
+                    isLoading = false
+                    return
+                }
+                
+                if let str = String(data: data, encoding: .utf8) {
+                    let cleanLink = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let videoUrl = URL(string: cleanLink) {
                         self.player = AVPlayer(url: videoUrl)
+                        self.player?.play()
                     } else {
                         errorMsg = "视频链接格式错误"
                     }
                 } else {
-                    errorMsg = "网络请求失败"
+                    errorMsg = "无法解析返回数据"
                 }
                 isLoading = false
             }
