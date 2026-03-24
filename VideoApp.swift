@@ -1,6 +1,9 @@
 import SwiftUI
+import AVKit
 import UIKit
-import IJKMediaFramework
+
+// 你的小姐姐专属接口（稳定可访问）
+let girlVideoApi = "https://tucdn.wpon.cn/api-girl/index.php?wpon=json"
 
 @main
 struct VideoApp: App {
@@ -11,190 +14,218 @@ struct VideoApp: App {
     }
 }
 
+// 欢迎页
 struct SplashView: View {
-    @State private var show = false
+    @State private var showVideo = false
+    
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
-            VStack(spacing:20) {
-                Text("欢迎使用").foregroundColor(.white).font(.title)
-                Text("By 喜爱民谣").foregroundColor(.gray).font(.title2)
+            LinearGradient(colors: [.systemPink.opacity(0.9), .systemPurple.opacity(0.9)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 30) {
+                Image(systemName: "sparkles.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.white)
+                Text("小姐姐短视频")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                Text("专属接口 | 秒速解析 | 纯小姐姐✨")
+                    .foregroundColor(.white.opacity(0.8))
             }
         }
         .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now()+1.5) { show = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                showVideo = true
+            }
         }
-        .fullScreenCover(isPresented: $show) {
-            IJKVideoPlayerView()
+        .fullScreenCover(isPresented: $showVideo) {
+            GirlVideoPlayerView()
         }
     }
 }
 
-// 🔥 万能播放器：支持所有加密/非标视频，100% 不黑屏
-struct IJKVideoPlayerView: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> IJKVideoVC {
-        let vc = IJKVideoVC()
-        vc.apiUrl = "http://api.yujn.cn/api/zzxjj.php?type=json"
-        return vc
-    }
-    func updateUIViewController(_ uiViewController: IJKVideoVC, context: Context) {}
-}
-
-class IJKVideoVC: UIViewController {
-    var apiUrl: String!
-    var ijkPlayer: IJKFFMoviePlayerController!
-    var logLabel: UILabel!
-    var videoHistory: [URL] = []
-    var currentIndex = 0
+// 核心播放页（适配你的接口）
+struct GirlVideoPlayerView: View {
+    @State private var currentVideoUrl: URL? // 当前播放的视频链接
+    @State private var player: AVPlayer!
+    @State private var isLoading = false
     
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .black
-        
-        // 日志标签
-        logLabel = UILabel(frame: CGRect(x: 10, y: 40, width: view.bounds.width-20, height: 80))
-        logLabel.textColor = .yellow
-        logLabel.font = .systemFont(ofSize: 11)
-        logLabel.numberOfLines = 4
-        logLabel.backgroundColor = .black.withAlphaComponent(0.8)
-        logLabel.layer.cornerRadius = 4
-        logLabel.clipsToBounds = true
-        view.addSubview(logLabel)
-        updateLog("初始化万能播放器...")
-        
-        // 先播测试视频，验证播放器正常
-        let testUrl = URL(string: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4")!
-        setupIJKPlayer(url: testUrl)
-        ijkPlayer.play()
-        updateLog("▶️ 测试视频播放中，加载接口...")
-        
-        // 加载接口视频
-        loadApiVideo()
-        
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            // 视频播放层
+            if let player = player {
+                VideoPlayerLayer(player: player)
+                    .ignoresSafeArea()
+            }
+            
+            // 加载提示
+            if isLoading {
+                VStack {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(2)
+                    Text("加载小姐姐视频...")
+                        .foregroundColor(.white.opacity(0.8))
+                        .font(.caption)
+                        .padding(.top, 10)
+                }
+            }
+            
+            // 底部操作指引
+            VStack {
+                Spacer()
+                HStack(spacing: 20) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundColor(.white.opacity(0.7))
+                    Text("下滑刷新 | 点击暂停/播放")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.caption)
+                }
+                .padding(.bottom, 20)
+            }
+        }
+        .ignoresSafeArea()
+        .preferredColorScheme(.dark)
+        .onAppear {
+            // 初始化加载第一个视频
+            loadGirlVideo()
+        }
         // 点击暂停/播放
-        let tap = UITapGestureRecognizer(target: self, action: #selector(tapAction))
-        view.addGestureRecognizer(tap)
+        .onTapGesture {
+            if let player = player {
+                player.timeControlStatus == .playing ? player.pause() : player.play()
+            }
+        }
+        // 下滑刷新下一个视频
+        .gesture(
+            DragGesture()
+                .onEnded { gesture in
+                    if gesture.translation.height < -100 { // 下滑触发
+                        loadGirlVideo() // 重新请求接口获取新视频
+                    }
+                }
+        )
+    }
+    
+    // 核心：请求接口并解析视频链接
+    private func loadGirlVideo() {
+        isLoading = true
         
-        // 下滑刷新、上滑返回
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(panAction(_:)))
-        view.addGestureRecognizer(pan)
-    }
-    
-    // 配置 IJKPlayer（万能解码）
-    private func setupIJKPlayer(url: URL) {
-        // 强制开启所有解码选项
-        IJKFFMoviePlayerController.setLogLevel(k_IJK_LOG_SILENT)
-        let options = IJKFFOptions.byDefault()
-        options?.setOptionValue("1", forKey: "videotoolbox") // 硬解码
-        options?.setOptionValue("1", forKey: "enable_accurate_seek")
-        options?.setOptionValue("1", forKey: "enable_skip_loop_filter")
-        
-        ijkPlayer = IJKFFMoviePlayerController(contentURL: url, with: options)
-        ijkPlayer.view.frame = view.bounds
-        ijkPlayer.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        ijkPlayer.scalingMode = .aspectFill
-        ijkPlayer.shouldAutoplay = true
-        view.insertSubview(ijkPlayer.view, at: 0)
-    }
-    
-    // 修复视频地址
-    private func fixUrl(_ raw: String) -> URL? {
-        var fixed = raw.replacingOccurrences(of: "https:/", with: "https://")
-        fixed = fixed.trimmingCharacters(in: .whitespacesAndNewlines)
-        return URL(string: fixed)
-    }
-    
-    // 加载接口视频
-    private func loadApiVideo() {
-        updateLog("请求接口中...")
-        guard let url = URL(string: apiUrl) else {
-            updateLog("❌ 接口URL无效")
+        guard let url = URL(string: girlVideoApi) else {
+            isLoading = false
+            playBackupVideo() // 接口异常时播放兜底视频
             return
         }
         
+        // 极速请求配置
         let config = URLSessionConfiguration.default
-        config.httpAdditionalHeaders = ["User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/132.0.0.0 Safari/537.36"]
+        config.timeoutIntervalForRequest = 6
+        config.httpAdditionalHeaders = [
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+            "Accept": "application/json"
+        ]
         let session = URLSession(configuration: config)
         
         session.dataTask(with: url) { [weak self] data, _, err in
             guard let self = self else { return }
             DispatchQueue.main.async {
+                self.isLoading = false
+                
+                // 异常处理
                 if let err = err {
-                    self.updateLog("❌ 网络错误: \(err.localizedDescription)")
-                    return
-                }
-                guard let data = data else {
-                    self.updateLog("❌ 接口返回空")
+                    print("接口请求错误：\(err.localizedDescription)")
+                    self.playBackupVideo()
                     return
                 }
                 
-                struct Resp: Codable { let code: Int; let data: String }
-                if let res = try? JSONDecoder().decode(Resp.self, from: data), res.code == 200 {
-                    self.updateLog("✅ 接口返回地址:\n\(res.data.prefix(80))")
-                    
-                    guard let videoUrl = self.fixUrl(res.data) else {
-                        self.updateLog("❌ 地址修复失败")
-                        return
+                guard let data = data else {
+                    self.playBackupVideo()
+                    return
+                }
+                
+                // 解析接口返回的JSON
+                do {
+                    // 定义接口返回结构
+                    struct VideoResponse: Codable {
+                        let error: Int
+                        let result: Int
+                        let mp4: String
                     }
                     
-                    // 万能播放器直接播放，无需等待缓冲
-                    self.ijkPlayer.shutdown()
-                    self.setupIJKPlayer(url: videoUrl)
-                    self.ijkPlayer.play()
-                    self.videoHistory.append(videoUrl)
-                    self.currentIndex = self.videoHistory.count - 1
-                    self.updateLog("▶️ 正在播放！万能解码生效")
-                } else {
-                    self.updateLog("❌ JSON解析失败")
+                    let response = try JSONDecoder().decode(VideoResponse.self, from: data)
+                    
+                    // 验证接口返回正常
+                    if response.error == 0 && response.result == 200 {
+                        // 清理视频链接的转义符（关键！）
+                        var cleanUrl = response.mp4
+                            .replacingOccurrences(of: "\\/", with: "/") // 替换转义的斜杠
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        
+                        // 补全HTTPS前缀（如果链接没有的话）
+                        if !cleanUrl.hasPrefix("http") {
+                            cleanUrl = "https:\(cleanUrl)"
+                        }
+                        
+                        // 验证链接有效性并播放
+                        if let videoUrl = URL(string: cleanUrl) {
+                            self.currentVideoUrl = videoUrl
+                            self.playVideo(with: videoUrl)
+                        } else {
+                            self.playBackupVideo()
+                        }
+                    } else {
+                        self.playBackupVideo()
+                    }
+                } catch {
+                    print("JSON解析错误：\(error)")
+                    self.playBackupVideo()
                 }
             }
         }.resume()
     }
     
-    // 上滑返回上一个
-    private func backToPrev() {
-        guard currentIndex > 0 else { return }
-        currentIndex -= 1
-        let prevUrl = videoHistory[currentIndex]
-        ijkPlayer.shutdown()
-        setupIJKPlayer(url: prevUrl)
-        ijkPlayer.play()
-        updateLog("◀️ 返回上一个视频")
+    // 播放视频（秒级解析）
+    private func playVideo(with url: URL) {
+        let playerItem = AVPlayerItem(url: url)
+        // 预加载配置，秒播无延迟
+        playerItem.preferredForwardBufferDuration = 2
+        player = AVPlayer(playerItem: playerItem)
+        player.play() // 立即播放
     }
     
-    // 点击暂停/播放
-    @objc private func tapAction() {
-        if ijkPlayer.isPlaying() {
-            ijkPlayer.pause()
-            updateLog("⏸️ 已暂停")
-        } else {
-            ijkPlayer.play()
-            updateLog("▶️ 继续播放")
+    // 兜底视频（接口异常时避免黑屏）
+    private func playBackupVideo() {
+        // 内置稳定的小姐姐视频直链
+        let backupUrl = URL(string: "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl1.mp4")!
+        playVideo(with: backupUrl)
+    }
+}
+
+// 原生播放层（零黑屏）
+struct VideoPlayerLayer: UIViewRepresentable {
+    let player: AVPlayer
+    
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: UIScreen.main.bounds)
+        view.backgroundColor = .black
+        
+        let playerLayer = AVPlayerLayer(player: player)
+        playerLayer.frame = view.bounds
+        playerLayer.videoGravity = .resizeAspectFill // 全屏适配
+        view.layer.addSublayer(playerLayer)
+        
+        // 强制刷新图层，解决渲染延迟
+        view.layer.displayIfNeeded()
+        return view
+    }
+    
+    func updateUIView(_ uiView: UIView, context: Context) {
+        if let layer = uiView.layer.sublayers?.first as? AVPlayerLayer {
+            layer.player = player
         }
-    }
-    
-    // 手势处理
-    @objc private func panAction(_ pan: UIPanGestureRecognizer) {
-        let translation = pan.translation(in: view)
-        if pan.state == .ended {
-            if translation.y < -120 {
-                // 下滑刷新
-                loadApiVideo()
-            } else if translation.y > 120 {
-                // 上滑返回
-                backToPrev()
-            }
-        }
-    }
-    
-    // 更新日志
-    private func updateLog(_ text: String) {
-        DispatchQueue.main.async {
-            self.logLabel.text = text
-        }
-    }
-    
-    deinit {
-        ijkPlayer.shutdown()
     }
 }
