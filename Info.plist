@@ -1,40 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>CFBundleDisplayName</key>
     <string>小姐姐短视频</string>
     <key>CFBundleExecutable</key>
     <string>VideoApp</string>
+    <!-- ✅ 彻底统一：和project.yml完全一致 -->
     <key>CFBundleIdentifier</key>
-    <string>com.xamyvideo.app</string>
+    <string>com.girl.video</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>MinimumOSVersion</key>
     <string>15.0</string>
-    
-    <!-- 🔥 关键：彻底放开网络限制 -->
+    <!-- 适配接口的网络配置 -->
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>
         <true/>
         <key>NSAllowsArbitraryLoadsForMedia</key>
         <true/>
-        <key>NSAllowsArbitraryLoadsInWebContent</key>
-        <true/>
+        <!-- 白名单你的接口域名 -->
         <key>NSExceptionDomains</key>
         <dict>
-            <key>api.yujn.cn</key>
+            <key>wpon.cn</key>
             <dict>
                 <key>NSIncludesSubdomains</key>
                 <true/>
-                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <key>NSThirdPartyExceptionAllowsInsecureHTTPLoads</key>
                 <true/>
-                <key>NSExceptionRequiresForwardSecrecy</key>
+                <key>NSThirdPartyExceptionRequiresForwardSecrecy</key>
                 <false/>
             </dict>
         </dict>
     </dict>
-    
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
 </dict>
