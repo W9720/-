@@ -16,7 +16,7 @@ extension View {
     }
 }
 
-// MARK: - KVO 时长监听封装类（解决 override 关键字报错）
+// MARK: - KVO 时长监听封装类
 class DurationObserver: NSObject {
     private let onDurationReady: (Double) -> Void
     
@@ -43,14 +43,12 @@ struct PlayHistoryItem: Codable, Identifiable {
     let videoUrl: String
     let playTime: Date
     let videoName: String
-    var playbackPosition: Double = 0.0 // 播放进度（秒）
+    var playbackPosition: Double = 0.0
     
-    // 计算属性：获取视频文件名
     var fileName: String {
         URL(string: videoUrl)?.lastPathComponent ?? "未知视频"
     }
     
-    // 计算属性：格式化播放时间
     var formattedTime: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MM-dd HH:mm"
@@ -58,7 +56,7 @@ struct PlayHistoryItem: Codable, Identifiable {
     }
 }
 
-// MARK: - 播放历史管理器（单例）
+// MARK: - 播放历史管理器
 class PlayHistoryManager: ObservableObject {
     static let shared = PlayHistoryManager()
     @Published var historyItems: [PlayHistoryItem] = []
@@ -326,7 +324,7 @@ struct GirlVideoPlayerView: View {
                 HStack {
                     Spacer()
                     
-                    Z {
+                    ZStack {
                         Circle()
                             .stroke(Color.gray.opacity(0.5), lineWidth: 3)
                             .frame(width: 44, height: 44)
@@ -1241,6 +1239,7 @@ struct HistoryVideoPlayerView: View {
                 }
         )
         .preferredColorScheme(.dark)
+    }
 }
 
 // MARK: - 离线视频播放页
