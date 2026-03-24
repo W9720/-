@@ -46,7 +46,7 @@ struct SplashView: View {
     }
 }
 
-// 核心播放页（适配你的接口）
+// 核心播放页（修复weak self错误）
 struct GirlVideoPlayerView: View {
     @State private var currentVideoUrl: URL? // 当前播放的视频链接
     @State private var player: AVPlayer!
@@ -111,7 +111,7 @@ struct GirlVideoPlayerView: View {
         )
     }
     
-    // 核心：请求接口并解析视频链接
+    // 核心：请求接口并解析视频链接（修复weak self错误）
     private func loadGirlVideo() {
         isLoading = true
         
@@ -130,8 +130,8 @@ struct GirlVideoPlayerView: View {
         ]
         let session = URLSession(configuration: config)
         
-        session.dataTask(with: url) { [weak self] data, _, err in
-            guard let self = self else { return }
+        // ✅ 修复：移除weak self（View是值类型，不需要weak）
+        session.dataTask(with: url) { data, _, err in
             DispatchQueue.main.async {
                 self.isLoading = false
                 
