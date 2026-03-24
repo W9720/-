@@ -20,17 +20,17 @@ extension View {
 class DurationObserver: NSObject {
     private let onDurationReady: (Double) -> Void
     
-    初始化(onDurationReady: @escaping (Double) -> Void) {
+    init(onDurationReady: @escaping (Double) -> Void) {
         self.onDurationReady = onDurationReady
-        超级.初始化（）
+        super.init()
     }
     
-    覆盖 函数 观察值(对于键路径 keyPath: String?, 对象: Any?, 变化: [NSKeyValueChangeKey : Any]?, 上下文: UnsafeMutableRawPointer?) {
-        如果 keyPath == "duration", 让 playerItem = 对象 作为? AVPlayerItem {
-            让 时长 = CMTimeGetSeconds(播放项.时长)
-            如果 持续时间.是有限的 并且 持续时间 > 0 {
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        if keyPath == "duration", let playerItem = object as? AVPlayerItem {
+            let duration = CMTimeGetSeconds(playerItem.duration)
+            if duration.isFinite && duration > 0 {
                 DispatchQueue.main.async {
-                    自身.onDurationReady(时长)
+                    self.onDurationReady(duration)
                 }
             }
         }
@@ -38,37 +38,36 @@ class DurationObserver: NSObject {
 }
 
 // MARK: - 播放历史模型
-结构体 PlayHistoryItem： Codable, Identifiable {
-    让 id = UUID()
-    让 视频链接：字符串
-    让 游戏时间：日期
-    让 视频名称：字符串
-    var 播放位置：Double = 0.0
+struct PlayHistoryItem: Codable, Identifiable {
+    let id = UUID()
+    let videoUrl: String
+    let playTime: Date
+    let videoName: String
+    var playbackPosition: Double = 0.0
     
-    // 排除 id 字段，避免 Codable 警告
-    枚举 编码键：字符串，编码键 {
-        案例 视频链接, 播放时间, 视频名称, 播放位置
+    enum CodingKeys: String, CodingKey {
+        case videoUrl, playTime, videoName, playbackPosition
     }
     
-    变量 fileName：字符串 {
-        URL(string: videoUrl)?.lastPathComponent ？？ "未知视频"
+    var fileName: String {
+        URL(string: videoUrl)?.lastPathComponent ?? "未知视频"
     }
     
-    变量 格式化时间：字符串 {
-        让 格式化器 = 日期格式化器()
-        格式化器.日期格式 = "MM-dd HH:mm"
-        返回 格式化器.字符串(来自: 播放时间)
+    var formattedTime: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM-dd HH:mm"
+        return formatter.string(from: playTime)
     }
 }
 
 // MARK: - 播放历史管理器
-类 PlayHistoryManager：/ObservableObject {
-    静态 让 共享 = 播放历史管理器()
-    @已发布 var 历史项目: [播放历史项目] = []
-    私人的 让 maxHistoryCount = 100
-    私有 让 用户默认键 = "播放历史项s"
+class PlayHistoryManager: ObservableObject {
+    static let shared = PlayHistoryManager()
+    @Published var historyItems: [PlayHistoryItem] = []
+    private let maxHistoryCount = 100
+    private let userDefaultsKey = "PlayHistoryItems"
     
-    私有 初始化(){
+    private init() {
         loadHistory()
     }
     
@@ -98,8 +97,8 @@ class DurationObserver: NSObject {
     
     func addHistory(videoUrl: String) {
         let existingIndex = historyItems.firstIndex { $0.videoUrl == videoUrl }
-        如果 让 索引 = 现有索引 {
-            historyItems.移除(在: 索引)
+        if let index = existingIndex {
+            historyItems.remove(at: index)
         }
         
         let item = PlayHistoryItem(
@@ -329,23 +328,23 @@ struct GirlVideoPlayerView: View {
                 HStack {
                     Spacer()
                     
-                   ZStack {
-    Circle()
-        .stroke(Color.gray.opacity(0.5), lineWidth: 3)
-        .frame(width: 44, height: 44)
-    
-    Circle()
-        .trim(from: 0, to: CGFloat(downloadModel.progress)) // 这里强转 CGFloat
-        .stroke(Color.red, lineWidth: 3)
-        .frame(width: 44, height: 44)
-        .rotationEffect(.degrees(-90))
-        .opacity(downloadModel.isDownloading ? 1 : 0)
-    
-    Image(systemName: downloadModel.isCompleted ? "checkmark.circle.fill" : "arrow.down.circle.fill")
-        .font(.system(size: 24))
-        .foregroundColor(.white)
-        .opacity(downloadModel.isDownloading ? 0.5 : 1)
-}
+                    ZStack {
+                        Circle()
+                            .stroke(Color.gray.opacity(0.5), lineWidth: 3)
+                            .frame(width: 44, height: 44)
+                        
+                        Circle()
+                            .trim(from: 0, to: CGFloat(downloadModel.progress))
+                            .stroke(Color.red, lineWidth: 3)
+                            .frame(width: 44, height: 44)
+                            .rotationEffect(.degrees(-90))
+                            .opacity(downloadModel.isDownloading ? 1 : 0)
+                        
+                        Image(systemName: downloadModel.isCompleted ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                            .opacity(downloadModel.isDownloading ? 0.5 : 1)
+                    }
                     .padding(.trailing, 20)
                     .padding(.bottom, 20)
                     .onTapGesture {
@@ -1338,109 +1337,3 @@ struct OfflineVideoPlayerView: View {
                 Spacer()
             }
         }
-        .onAppear {
-            player = AVPlayer(url: videoUrl)
-            player.play()
-            
-            do {
-                try AVAudioSession.sharedInstance().setActive(true)
-            } catch {
-                print("音频激活失败: \(error)")
-            }
-            
-            if let currentItem = player.currentItem {
-                let observer = DurationObserver { duration in
-                    self.totalDuration = duration
-                }
-                self.durationObserver = observer
-                currentItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
-                
-                timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { time in
-                    guard !self.isDraggingProgress, let currentItem = player.currentItem else { return }
-                    
-                    let duration = CMTimeGetSeconds(currentItem.duration)
-                    let currentTime = CMTimeGetSeconds(time)
-                    
-                    if duration.isFinite && duration > 0 {
-                        self.currentTime = currentTime
-                        self.progress = currentTime / duration
-                    }
-                }
-            }
-        }
-        .onDisappear {
-            player?.pause()
-            if let currentItem = player?.currentItem, let observer = durationObserver {
-                currentItem.removeObserver(observer, forKeyPath: "duration")
-                self.durationObserver = nil
-            }
-            if let observer = timeObserver, let player = player {
-                player.removeTimeObserver(observer)
-            }
-        }
-        .onTapGesture {
-            if let player = player {
-                player.timeControlStatus == .playing ? player.pause() : player.play()
-            }
-        }
-        .gesture(
-            DragGesture(minimumDistance: 1)
-                .onChanged { gesture in
-                    guard totalDuration > 0 else { return }
-                    
-                    isDraggingProgress = true
-                    player?.pause()
-                    
-                    let xPosition = gesture.location.x
-                    let maxWidth = UIScreen.main.bounds.width - 40
-                    let newProgress = max(0, min(1, xPosition / maxWidth))
-                    
-                    progress = newProgress
-                    currentTime = newProgress * totalDuration
-                }
-                .onEnded { _ in
-                    guard totalDuration > 0, let player = player else {
-                        isDraggingProgress = false
-                        return
-                    }
-                    
-                    let targetTime = CMTime(seconds: currentTime, preferredTimescale: 1000)
-                    player.seek(to: targetTime) { _ in
-                        self.isDraggingProgress = false
-                        player.play()
-                    }
-                }
-        )
-        .preferredColorScheme(.dark)
-    }
-}
-
-// MARK: - 原生播放层
-struct VideoPlayerLayer: UIViewRepresentable {
-    let player: AVPlayer
-    
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: UIScreen.main.bounds)
-        view.backgroundColor = .black
-        
-        let playerLayer = AVPlayerLayer(player: player)
-        playerLayer.frame = view.bounds
-        playerLayer.videoGravity = .resizeAspectFill
-        
-        playerLayer.shouldRasterize = true
-        playerLayer.rasterizationScale = UIScreen.main.scale
-        playerLayer.needsDisplayOnBoundsChange = false
-        
-        view.layer.addSublayer(playerLayer)
-        view.layer.displayIfNeeded()
-        return view
-    }
-    
-    func updateUIView(_ uiView: UIView, context: Context) {
-        DispatchQueue.main.async {
-            if let layer = uiView.layer.sublayers?.first as? AVPlayerLayer {
-                layer.player = self.player
-            }
-        }
-    }
-}
