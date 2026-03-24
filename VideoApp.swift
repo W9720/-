@@ -3,6 +3,7 @@ import AVKit
 import UIKit
 import AVFoundation
 import Foundation
+import Photos
 
 // iOS版本兼容扩展
 extension View {
@@ -152,7 +153,7 @@ struct VideoApp: App {
     var body: some Scene {
         WindowGroup {
             TabView {
-                SplashView()
+                GirlVideoPlayerView()
                     .tabItem {
                         Image(systemName: "play.circle.fill")
                         Text("视频播放")
@@ -176,38 +177,10 @@ struct VideoApp: App {
     }
 }
 
-// MARK: - 欢迎页
+// MARK: - 欢迎页（废弃，直接进入播放Tab）
 struct SplashView: View {
-    @State private var showVideo = false
-    
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [Color(red: 1.0, green: 0.18, blue: 0.33).opacity(0.9),
-                                   Color(red: 0.55, green: 0.0, blue: 0.55).opacity(0.9)],
-                          startPoint: .top,
-                          endPoint: .bottom)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 30) {
-                Image(systemName: "sparkles.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.white)
-                Text("别说反话 别冷冰冰")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                Text("By 喜爱民谣")
-                    .foregroundColor(.white.opacity(0.8))
-            }
-        }
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                showVideo = true
-            }
-        }
-        .fullScreenCover(isPresented: $showVideo) {
-            GirlVideoPlayerView()
-        }
+        EmptyView()
     }
 }
 
@@ -243,7 +216,7 @@ struct GirlVideoPlayerView: View {
     @State private var showDownloadToast = false
     
     @EnvironmentObject private var historyManager: PlayHistoryManager
-    @Environment(\.presentationMode) var presentationMode // 返回按钮
+    @Environment(\.presentationMode) var presentationMode
     
     @State private var currentTime: Double = 0.0
     @State private var totalDuration: Double = 0.0
@@ -285,58 +258,8 @@ struct GirlVideoPlayerView: View {
             }
             
             VStack {
-                HStack {
-                    Button(action: {
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .foregroundColor(.white)
-                            .frame(width: 44, height: 44)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
-                    .padding(.leading, 20)
-                    
-                    Spacer()
-                }
-                .padding(.top, 40)
-                
                 Spacer()
                 
-                // 下载按钮
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        
-                        ZStack {
-                            Circle()
-                                .stroke(Color.gray.opacity(0.5), lineWidth: 3)
-                                .frame(width: 44, height: 44)
-                            
-                            Circle()
-                                .trim(from: 0, to: CGFloat(downloadModel.progress))
-                                .stroke(Color.red, lineWidth: 3)
-                                .frame(width: 44, height: 44)
-                                .rotationEffect(.degrees(-90))
-                                .opacity(downloadModel.isDownloading ? 1 : 0)
-                            
-                            Image(systemName: downloadModel.isCompleted ? "checkmark.circle.fill" : "arrow.down.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white)
-                                .opacity(downloadModel.isDownloading ? 0.5 : 1)
-                        }
-                        .onTapGesture {
-                            if let url = currentVideoUrl, !downloadModel.isDownloading {
-                                startDownload(url: url)
-                            }
-                        }
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 20)
-                    }
-                }
-                
-                // 进度条（已移到底部 + 已删除红色进度条）
                 VStack(spacing: 8) {
                     ZStack(alignment: .leading) {
                         Rectangle()
@@ -367,13 +290,44 @@ struct GirlVideoPlayerView: View {
                 }
                 .padding(.bottom, 10)
                 
-                // 底部文字
                 VStack(spacing: 20) {
                     Text("富则入道而润其根 穷则观屏而勤其手")
                         .foregroundColor(.white.opacity(0.7))
                         .font(.caption)
                 }
                 .padding(.bottom, 70)
+            }
+            
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    
+                    ZStack {
+                        Circle()
+                            .stroke(Color.gray.opacity(0.5), lineWidth: 3)
+                            .frame(width: 44, height: 44)
+                        
+                        Circle()
+                            .trim(from: 0, to: CGFloat(downloadModel.progress))
+                            .stroke(Color.red, lineWidth: 3)
+                            .frame(width: 44, height: 44)
+                            .rotationEffect(.degrees(-90))
+                            .opacity(downloadModel.isDownloading ? 1 : 0)
+                        
+                        Image(systemName: downloadModel.isCompleted ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                            .opacity(downloadModel.isDownloading ? 0.5 : 1)
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
+                    .onTapGesture {
+                        if let url = currentVideoUrl, !downloadModel.isDownloading {
+                            startDownload(url: url)
+                        }
+                    }
+                }
             }
             
             if showDownloadToast {
@@ -393,14 +347,15 @@ struct GirlVideoPlayerView: View {
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
         .onAppear {
-            loadCoverImage()
-            loadGirlVideo()
-            preloadNextVideo()
+            if player == nil {
+                loadCoverImage()
+                loadGirlVideo()
+                preloadNextVideo()
+            }
         }
         .onDisappear {
             removePlayerObservers()
             player?.pause()
-            nextPlayerItem = nil
             
             if let url = currentVideoUrl {
                 historyManager.updatePlaybackPosition(videoUrl: url.absoluteString, position: currentTime)
@@ -890,6 +845,13 @@ struct DownloadedVideosView: View {
                             Spacer()
                             
                             Button {
+                                saveToAlbum(url: url)
+                            } label: {
+                                Image(systemName: "square.and.arrow.up")
+                                    .foregroundColor(.white)
+                            }
+                            
+                            Button {
                                 deleteVideo(url: url)
                             } label: {
                                 Image(systemName: "trash.fill")
@@ -924,10 +886,8 @@ struct DownloadedVideosView: View {
         .onReceive(NotificationCenter.default.publisher(for: .downloadCompleted)) { _ in
             loadDownloadedVideos()
         }
-        .fullScreenCover(isPresented: $showPlayer) {
-            if let url = selectedVideoUrl {
-                OfflineVideoPlayerView(videoUrl: url)
-            }
+        .fullScreenCover(item: $selectedVideoUrl) { url in
+            OfflineVideoPlayerView(videoUrl: url)
         }
     }
     
@@ -965,6 +925,19 @@ struct DownloadedVideosView: View {
             return String(format: "%.2f MB", sizeMB)
         } catch {
             return "未知大小"
+        }
+    }
+    
+    private func saveToAlbum(url: URL) {
+        PHPhotoLibrary.requestAuthorization { status in
+            guard status == .authorized else { return }
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetCreationRequest.forAsset().addResource(with: .video, fileURL: url, options: nil)
+            }) { success, error in
+                if success {
+                    print("保存相册成功")
+                }
+            }
         }
     }
 }
@@ -1064,10 +1037,8 @@ struct PlayHistoryView: View {
             }
             .disabled(historyManager.historyItems.isEmpty)
         }
-        .fullScreenCover(isPresented: $showPlayer) {
-            if let urlString = selectedVideoUrl, let url = URL(string: urlString) {
-                HistoryVideoPlayerView(videoUrl: url)
-            }
+        .fullScreenCover(item: $selectedVideoUrl) { urlString in
+            HistoryVideoPlayerView(videoUrl: URL(string: urlString)!)
         }
     }
 }
@@ -1086,29 +1057,35 @@ struct HistoryVideoPlayerView: View {
     @State private var timeObserver: Any?
     
     @State private var durationObserver: DurationObserver?
+    @State private var showCover = true
+    @State private var coverImage: UIImage?
     
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            if let player = player {
-                VideoPlayerLayer(player: player)
+            if showCover, let image = coverImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
                     .ignoresSafeArea()
             }
             
+            if let player = player {
+                VideoPlayerLayer(player: player)
+                    .ignoresSafeArea()
+                    .opacity(showCover ? 0 : 1)
+            }
+            
             VStack {
+                Spacer()
+                
                 VStack(spacing: 8) {
                     ZStack(alignment: .leading) {
                         Rectangle()
                             .frame(height: 3)
                             .foregroundColor(.white.opacity(0.3))
                             .cornerRadius(1.5)
-                        
-                        Rectangle()
-                            .frame(width: CGFloat(progress) * UIScreen.main.bounds.width - 40, height: 3)
-                            .foregroundColor(.red)
-                            .cornerRadius(1.5)
-                            .animation(.linear, value: progress)
                         
                         Circle()
                             .frame(width: 8, height: 8)
@@ -1131,9 +1108,7 @@ struct HistoryVideoPlayerView: View {
                     }
                     .padding(.horizontal, 20)
                 }
-                .padding(.top, 40)
-                
-                Spacer()
+                .padding(.bottom, 10)
             }
             
             VStack {
@@ -1151,113 +1126,75 @@ struct HistoryVideoPlayerView: View {
                     }
                     Spacer()
                 }
-                Spacer()
-            }
-            .padding(.top, 40)
-            .padding(.leading, 20)
-            
-            VStack {
-                Spacer()
-                Image(systemName: player?.timeControlStatus == .playing ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.white.opacity(0.8))
-                    .opacity(0.7)
+                .padding(.top, 40)
+                .padding(.leading, 20)
+                
                 Spacer()
             }
         }
+        .preferredColorScheme(.dark)
         .onAppear {
+            loadCover()
             player = AVPlayer(url: videoUrl)
             
             if let historyItem = historyManager.historyItems.first(where: { $0.videoUrl == videoUrl.absoluteString }) {
                 let startTime = CMTime(seconds: historyItem.playbackPosition, preferredTimescale: 1000)
                 player.seek(to: startTime) { _ in
                     self.player.play()
+                    self.showCover = false
                 }
             } else {
                 player.play()
+                showCover = false
             }
             
-            do {
-                try AVAudioSession.sharedInstance().setActive(true)
-            } catch {
-                print("音频激活失败: \(error)")
-            }
-            
-            if let currentItem = player.currentItem {
-                let observer = DurationObserver { duration in
-                    self.totalDuration = duration
-                }
-                self.durationObserver = observer
-                currentItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
-                
-                timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { time in
-                    guard !self.isDraggingProgress, let currentItem = player.currentItem else { return }
-                    
-                    let duration = CMTimeGetSeconds(currentItem.duration)
-                    let currentTime = CMTimeGetSeconds(time)
-                    
-                    if duration.isFinite && duration > 0 {
-                        self.currentTime = currentTime
-                        self.progress = currentTime / duration
-                        
-                        if Int(currentTime) % 1 == 0 {
-                            self.historyManager.updatePlaybackPosition(videoUrl: self.videoUrl.absoluteString, position: currentTime)
-                        }
-                    }
-                }
-            }
+            setupObservers()
         }
         .onDisappear {
             historyManager.updatePlaybackPosition(videoUrl: videoUrl.absoluteString, position: currentTime)
-            
+            removeObservers()
             player?.pause()
-            if let currentItem = player?.currentItem, let observer = durationObserver {
-                currentItem.removeObserver(observer, forKeyPath: "duration")
-                self.durationObserver = nil
-            }
-            if let observer = timeObserver, let player = player {
-                player.removeTimeObserver(observer)
-            }
         }
         .onTapGesture {
-            if let player = player {
-                player.timeControlStatus == .playing ? player.pause() : player.play()
+            player.timeControlStatus == .playing ? player.pause() : player.play()
+        }
+    }
+    
+    private func loadCover() {
+        guard let url = URL(string: "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl-cover.jpg") else { return }
+        DispatchQueue.global().async {
+            if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
+                DispatchQueue.main.async {
+                    coverImage = img
+                }
             }
         }
-        .gesture(
-            DragGesture(minimumDistance: 1)
-                .onChanged { gesture in
-                    guard totalDuration > 0 else { return }
-                    
-                    isDraggingProgress = true
-                    player?.pause()
-                    
-                    let xPosition = gesture.location.x
-                    let maxWidth = UIScreen.main.bounds.width - 40
-                    let newProgress = max(0, min(1, xPosition / maxWidth))
-                    
-                    progress = newProgress
-                    currentTime = newProgress * totalDuration
-                }
-                .onEnded { _ in
-                    guard totalDuration > 0, let player = player else {
-                        isDraggingProgress = false
-                        return
-                    }
-                    
-                    let targetTime = CMTime(seconds: currentTime, preferredTimescale: 1000)
-                    player.seek(to: targetTime) { _ in
-                        self.isDraggingProgress = false
-                        player.play()
-                        self.historyManager.updatePlaybackPosition(videoUrl: self.videoUrl.absoluteString, position: self.currentTime)
-                    }
-                }
-        )
-        .preferredColorScheme(.dark)
+    }
+    
+    private func setupObservers() {
+        let observer = DurationObserver { d in
+            totalDuration = d
+        }
+        durationObserver = observer
+        player.currentItem?.addObserver(observer, forKeyPath: "duration", options: .new, context: nil)
+        
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, 1000), queue: .main) { t in
+            currentTime = CMTimeGetSeconds(t)
+            if totalDuration > 0 {
+                progress = currentTime / totalDuration
+            }
+        }
+    }
+    
+    private func removeObservers() {
+        if let o = timeObserver { player.removeTimeObserver(o) }
+        if let o = durationObserver, let item = player.currentItem {
+            item.removeObserver(o, forKeyPath: "duration")
+        }
     }
 }
 
-// MARK: - 离线视频播放页
+// MARK: - 离线视频播放页（修复可播放）
 struct OfflineVideoPlayerView: View {
     let videoUrl: URL
     @State private var player: AVPlayer!
@@ -1268,31 +1205,36 @@ struct OfflineVideoPlayerView: View {
     @State private var progress: Double = 0.0
     @State private var isDraggingProgress = false
     @State private var timeObserver: Any?
-    
     @State private var durationObserver: DurationObserver?
+    @State private var showCover = true
+    @State private var coverImage: UIImage?
     
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            if let player = player {
-                VideoPlayerLayer(player: player)
+            if showCover, let image = coverImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
                     .ignoresSafeArea()
             }
             
+            if let player = player {
+                VideoPlayerLayer(player: player)
+                    .ignoresSafeArea()
+                    .opacity(showCover ? 0 : 1)
+            }
+            
             VStack {
+                Spacer()
+                
                 VStack(spacing: 8) {
                     ZStack(alignment: .leading) {
                         Rectangle()
                             .frame(height: 3)
                             .foregroundColor(.white.opacity(0.3))
                             .cornerRadius(1.5)
-                        
-                        Rectangle()
-                            .frame(width: CGFloat(progress) * UIScreen.main.bounds.width - 40, height: 3)
-                            .foregroundColor(.red)
-                            .cornerRadius(1.5)
-                            .animation(.linear, value: progress)
                         
                         Circle()
                             .frame(width: 8, height: 8)
@@ -1315,9 +1257,7 @@ struct OfflineVideoPlayerView: View {
                     }
                     .padding(.horizontal, 20)
                 }
-                .padding(.top, 40)
-                
-                Spacer()
+                .padding(.bottom, 10)
             }
             
             VStack {
@@ -1334,94 +1274,60 @@ struct OfflineVideoPlayerView: View {
                     }
                     Spacer()
                 }
-                Spacer()
-            }
-            .padding(.top, 40)
-            .padding(.leading, 20)
-            
-            VStack {
-                Spacer()
-                Image(systemName: player?.timeControlStatus == .playing ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.white.opacity(0.8))
-                    .opacity(0.7)
+                .padding(.top, 40)
+                .padding(.leading, 20)
+                
                 Spacer()
             }
         }
+        .preferredColorScheme(.dark)
         .onAppear {
+            loadCover()
             player = AVPlayer(url: videoUrl)
             player.play()
-            
-            do {
-                try AVAudioSession.sharedInstance().setActive(true)
-            } catch {
-                print("音频激活失败: \(error)")
-            }
-            
-            if let currentItem = player.currentItem {
-                let observer = DurationObserver { duration in
-                    self.totalDuration = duration
-                }
-                self.durationObserver = observer
-                currentItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
-                
-                timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { time in
-                    guard !self.isDraggingProgress, let currentItem = player.currentItem else { return }
-                    
-                    let duration = CMTimeGetSeconds(currentItem.duration)
-                    let currentTime = CMTimeGetSeconds(time)
-                    
-                    if duration.isFinite && duration > 0 {
-                        self.currentTime = currentTime
-                        self.progress = currentTime / duration
-                    }
-                }
-            }
+            showCover = false
+            setupObservers()
         }
         .onDisappear {
+            removeObservers()
             player?.pause()
-            if let currentItem = player?.currentItem, let observer = durationObserver {
-                currentItem.removeObserver(observer, forKeyPath: "duration")
-                self.durationObserver = nil
-            }
-            if let observer = timeObserver, let player = player {
-                player.removeTimeObserver(observer)
-            }
         }
         .onTapGesture {
-            if let player = player {
-                player.timeControlStatus == .playing ? player.pause() : player.play()
+            player.timeControlStatus == .playing ? player.pause() : player.play()
+        }
+    }
+    
+    private func loadCover() {
+        guard let url = URL(string: "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl-cover.jpg") else { return }
+        DispatchQueue.global().async {
+            if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
+                DispatchQueue.main.async {
+                    coverImage = img
+                }
             }
         }
-        .gesture(
-            DragGesture(minimumDistance: 1)
-                .onChanged { gesture in
-                    guard totalDuration > 0 else { return }
-                    
-                    isDraggingProgress = true
-                    player?.pause()
-                    
-                    let xPosition = gesture.location.x
-                    let maxWidth = UIScreen.main.bounds.width - 40
-                    let newProgress = max(0, min(1, xPosition / maxWidth))
-                    
-                    progress = newProgress
-                    currentTime = newProgress * totalDuration
-                }
-                .onEnded { _ in
-                    guard totalDuration > 0, let player = player else {
-                        isDraggingProgress = false
-                        return
-                    }
-                    
-                    let targetTime = CMTime(seconds: currentTime, preferredTimescale: 1000)
-                    player.seek(to: targetTime) { _ in
-                        self.isDraggingProgress = false
-                        player.play()
-                    }
-                }
-        )
-        .preferredColorScheme(.dark)
+    }
+    
+    private func setupObservers() {
+        let observer = DurationObserver { d in
+            totalDuration = d
+        }
+        durationObserver = observer
+        player.currentItem?.addObserver(observer, forKeyPath: "duration", options: .new, context: nil)
+        
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, 1000), queue: .main) { t in
+            currentTime = CMTimeGetSeconds(t)
+            if totalDuration > 0 {
+                progress = currentTime / totalDuration
+            }
+        }
+    }
+    
+    private func removeObservers() {
+        if let o = timeObserver { player.removeTimeObserver(o) }
+        if let o = durationObserver, let item = player.currentItem {
+            item.removeObserver(o, forKeyPath: "duration")
+        }
     }
 }
 
@@ -1432,25 +1338,12 @@ struct VideoPlayerLayer: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: UIScreen.main.bounds)
         view.backgroundColor = .black
-        
         let playerLayer = AVPlayerLayer(player: player)
         playerLayer.frame = view.bounds
         playerLayer.videoGravity = .resizeAspectFill
-        
-        playerLayer.shouldRasterize = true
-        playerLayer.rasterizationScale = UIScreen.main.scale
-        playerLayer.needsDisplayOnBoundsChange = false
-        
         view.layer.addSublayer(playerLayer)
-        view.layer.displayIfNeeded()
         return view
     }
     
-    func updateUIView(_ uiView: UIView, context: Context) {
-        DispatchQueue.main.async {
-            if let layer = uiView.layer.sublayers?.first as? AVPlayerLayer {
-                layer.player = self.player
-            }
-        }
-    }
+    func updateUIView(_ uiView: UIView, context: Context) {}
 }
