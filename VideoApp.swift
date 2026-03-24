@@ -50,14 +50,13 @@ struct PlayHistoryItem: Codable, Identifiable {
 class PlayHistoryManager: ObservableObject {
     static let shared = PlayHistoryManager()
     @Published var historyItems: [PlayHistoryItem] = []
-    private let maxHistoryCount = 100 // 最多保留50条记录
+    private let maxHistoryCount = 100
     private let userDefaultsKey = "PlayHistoryItems"
     
     private init() {
         loadHistory()
     }
     
-    // 加载历史记录
     private func loadHistory() {
         if let data = UserDefaults.standard.data(forKey: userDefaultsKey) {
             do {
@@ -71,7 +70,6 @@ class PlayHistoryManager: ObservableObject {
         }
     }
     
-    // 保存历史记录
     private func saveHistory() {
         do {
             let encoder = JSONEncoder()
@@ -83,15 +81,12 @@ class PlayHistoryManager: ObservableObject {
         }
     }
     
-    // 添加播放记录
     func addHistory(videoUrl: String) {
-        // 去重：如果已存在该视频，移除旧记录
         let existingIndex = historyItems.firstIndex { $0.videoUrl == videoUrl }
         if let index = existingIndex {
             historyItems.remove(at: index)
         }
         
-        // 创建新记录
         let item = PlayHistoryItem(
             videoUrl: videoUrl,
             playTime: Date(),
@@ -99,19 +94,15 @@ class PlayHistoryManager: ObservableObject {
             playbackPosition: 0.0
         )
         
-        // 添加到开头
         historyItems.insert(item, at: 0)
         
-        // 限制最大数量
         if historyItems.count > maxHistoryCount {
             historyItems.removeLast(historyItems.count - maxHistoryCount)
         }
         
-        // 保存
         saveHistory()
     }
     
-    // 更新播放进度
     func updatePlaybackPosition(videoUrl: String, position: Double) {
         if let index = historyItems.firstIndex(where: { $0.videoUrl == videoUrl }) {
             historyItems[index].playbackPosition = position
@@ -119,13 +110,11 @@ class PlayHistoryManager: ObservableObject {
         }
     }
     
-    // 删除单个记录
     func deleteHistory(item: PlayHistoryItem) {
         historyItems.removeAll { $0.id == item.id }
         saveHistory()
     }
     
-    // 清空所有记录
     func clearAllHistory() {
         historyItems.removeAll()
         saveHistory()
@@ -135,10 +124,8 @@ class PlayHistoryManager: ObservableObject {
 // MARK: - 主应用入口
 @main
 struct VideoApp: App {
-    // 注入历史管理器
     @StateObject private var historyManager = PlayHistoryManager.shared
     
-    // App启动时强制开启音频会话，绕过系统静音
     init() {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
@@ -150,7 +137,6 @@ struct VideoApp: App {
     
     var body: some Scene {
         WindowGroup {
-            // TabView增加播放历史页
             TabView {
                 SplashView()
                     .tabItem {
@@ -171,7 +157,7 @@ struct VideoApp: App {
                     }
             }
             .preferredColorScheme(.dark)
-            .environmentObject(historyManager) // 注入历史管理器
+            .environmentObject(historyManager)
         }
     }
 }
@@ -228,45 +214,36 @@ func formatTime(_ seconds: Double) -> String {
     return String(format: "%02d:%02d", minutes, seconds)
 }
 
-// MARK: - 核心播放页（集成进度条+时长显示）
+// MARK: - 核心播放页
 struct GirlVideoPlayerView: View {
-    // 原有变量
     @State private var currentVideoUrl: URL?
     @State private var player: AVPlayer!
     @State private var isLoading = false
     @State private var timeObserver: Any?
     
-    // 性能优化相关变量
     @State private var nextPlayerItem: AVPlayerItem?
     @State private var showCover = true
     @State private var coverImage: UIImage?
     
-    // 下载功能相关变量
     @StateObject private var downloadModel = DownloadTaskModel()
     @State private var showDownloadToast = false
     
-    // 注入历史管理器
     @EnvironmentObject private var historyManager: PlayHistoryManager
     
-    // 进度条相关变量
-    @State private var currentTime: Double = 0.0       // 当前播放时间（秒）
-    @State private var totalDuration: Double = 0.0     // 视频总时长（秒）
-    @State private var progress: Double = 0.0          // 播放进度（0-1）
-    @State private var isDraggingProgress = false      // 是否正在拖拽进度条
+    @State private var currentTime: Double = 0.0
+    @State private var totalDuration: Double = 0.0
+    @State private var progress: Double = 0.0
+    @State private var isDraggingProgress = false
     
-    // KVO 监听实例
     @State private var durationObserver: DurationObserver?
     
-    // 小姐姐专属接口（稳定可访问）
     let girlVideoApi = "https://tucdn.wpon.cn/api-girl/index.php?wpon=json"
-    // 封面图地址（解决黑屏）
     let videoCoverImage = "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl-cover.jpg"
     
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            // 封面图
             if showCover, let image = coverImage {
                 Image(uiImage: image)
                     .resizable()
@@ -274,14 +251,12 @@ struct GirlVideoPlayerView: View {
                     .ignoresSafeArea()
             }
             
-            // 视频播放层
             if let player = player {
                 VideoPlayerLayer(player: player)
                     .ignoresSafeArea()
                     .opacity(showCover ? 0 : 1)
             }
             
-            // 加载提示
             if isLoading {
                 VStack {
                     ProgressView()
@@ -294,26 +269,20 @@ struct GirlVideoPlayerView: View {
                 }
             }
             
-            // 进度条和时长显示区域
             VStack {
-                // 进度条
                 VStack(spacing: 8) {
-                    // 进度条轨道
                     ZStack(alignment: .leading) {
-                        // 背景轨道
                         Rectangle()
                             .frame(height: 3)
                             .foregroundColor(.white.opacity(0.3))
                             .cornerRadius(1.5)
                         
-                        // 进度条
                         Rectangle()
                             .frame(width: CGFloat(progress) * UIScreen.main.bounds.width - 40, height: 3)
                             .foregroundColor(.red)
                             .cornerRadius(1.5)
                             .animation(.linear, value: progress)
                         
-                        // 进度条拖拽滑块
                         Circle()
                             .frame(width: 8, height: 8)
                             .foregroundColor(.white)
@@ -322,16 +291,13 @@ struct GirlVideoPlayerView: View {
                     }
                     .padding(.horizontal, 20)
                     
-                    // 时长显示
                     HStack {
-                        // 已播放时长
                         Text(formatTime(currentTime))
                             .foregroundColor(.white)
                             .font(.caption)
                         
                         Spacer()
                         
-                        // 总时长
                         Text(formatTime(totalDuration))
                             .foregroundColor(.white.opacity(0.7))
                             .font(.caption)
@@ -343,15 +309,12 @@ struct GirlVideoPlayerView: View {
                 Spacer()
             }
             
-            // 下载按钮+进度条
             VStack {
                 Spacer()
                 HStack {
                     Spacer()
                     
-                    // 下载按钮/进度条
                     ZStack {
-                        // 进度环
                         Circle()
                             .stroke(Color.gray.opacity(0.5), lineWidth: 3)
                             .frame(width: 44, height: 44)
@@ -363,7 +326,6 @@ struct GirlVideoPlayerView: View {
                             .rotationEffect(.degrees(-90))
                             .opacity(downloadModel.isDownloading ? 1 : 0)
                         
-                        // 下载图标
                         Image(systemName: downloadModel.isCompleted ? "checkmark.circle.fill" : "arrow.down.circle.fill")
                             .font(.system(size: 24))
                             .foregroundColor(.white)
@@ -379,11 +341,9 @@ struct GirlVideoPlayerView: View {
                 }
             }
             
-            // 操作指引
             VStack {
                 Spacer()
                 HStack(spacing: 20) {
-                   
                     Text("富则入道而润其根 穷则观屏而勤其手")
                         .foregroundColor(.white.opacity(0.7))
                         .font(.caption)
@@ -391,7 +351,6 @@ struct GirlVideoPlayerView: View {
                 .padding(.bottom, 70)
             }
             
-            // 下载提示 Toast
             if showDownloadToast {
                 VStack {
                     Spacer()
@@ -418,7 +377,6 @@ struct GirlVideoPlayerView: View {
             player?.pause()
             nextPlayerItem = nil
             
-            // 保存最后播放进度
             if let url = currentVideoUrl {
                 historyManager.updatePlaybackPosition(videoUrl: url.absoluteString, position: currentTime)
             }
@@ -435,12 +393,10 @@ struct GirlVideoPlayerView: View {
             DragGesture()
                 .onEnded { gesture in
                     if gesture.translation.height < -100 {
-                        // 保存当前进度
                         if let url = currentVideoUrl {
                             historyManager.updatePlaybackPosition(videoUrl: url.absoluteString, position: currentTime)
                         }
                         
-                        // 优先切换预加载视频
                         if let nextItem = nextPlayerItem {
                             switchToPreloadedVideo(nextItem)
                             preloadNextVideo()
@@ -454,7 +410,6 @@ struct GirlVideoPlayerView: View {
                     }
                 }
         )
-        // 进度条拖拽手势
         .gesture(
             DragGesture(minimumDistance: 1)
                 .onChanged { gesture in
@@ -463,7 +418,6 @@ struct GirlVideoPlayerView: View {
                     isDraggingProgress = true
                     player?.pause()
                     
-                    // 计算拖拽位置对应的进度
                     let xPosition = gesture.location.x
                     let maxWidth = UIScreen.main.bounds.width - 40
                     let newProgress = max(0, min(1, xPosition / maxWidth))
@@ -477,13 +431,11 @@ struct GirlVideoPlayerView: View {
                         return 
                     }
                     
-                    // 跳转到拖拽位置
                     let targetTime = CMTime(seconds: currentTime, preferredTimescale: 1000)
                     player.seek(to: targetTime) { _ in
                         self.isDraggingProgress = false
                         player.play()
                         
-                        // 保存进度到历史记录
                         if let url = self.currentVideoUrl {
                             self.historyManager.updatePlaybackPosition(videoUrl: url.absoluteString, position: self.currentTime)
                         }
@@ -493,7 +445,6 @@ struct GirlVideoPlayerView: View {
         .animation(.none, value: showCover)
     }
     
-    // MARK: - 下载功能核心方法
     private func startDownload(url: URL) {
         let fileName = url.lastPathComponent
         let destinationUrl = getDocumentsDirectory().appendingPathComponent(fileName)
@@ -513,12 +464,10 @@ struct GirlVideoPlayerView: View {
         task.resume()
     }
     
-    // 获取沙盒Documents目录
     private func getDocumentsDirectory() -> URL {
         return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
     }
     
-    // 显示下载提示
     private func showDownloadToast(message: String = "视频下载完成！前往「我的下载」查看") {
         showDownloadToast = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -526,8 +475,6 @@ struct GirlVideoPlayerView: View {
         }
     }
     
-    // MARK: - 视频加载相关方法
-    // 封面图预加载
     private func loadCoverImage() {
         guard let url = URL(string: videoCoverImage) else { return }
         DispatchQueue.global(qos: .userInitiated).async {
@@ -539,7 +486,6 @@ struct GirlVideoPlayerView: View {
         }
     }
     
-    // 预加载下一个视频
     private func preloadNextVideo() {
         DispatchQueue.global(qos: .userInitiated).async {
             guard let url = URL(string: self.girlVideoApi) else { return }
@@ -576,7 +522,6 @@ struct GirlVideoPlayerView: View {
                         if let videoUrl = URL(string: cleanUrl) {
                             let playerItem = AVPlayerItem(url: videoUrl)
                             playerItem.preferredForwardBufferDuration = 10
-                            playerItem.canUseNetworkResourcesForLiveStreamingWhilePaused = true
                             
                             DispatchQueue.main.async {
                                 self.nextPlayerItem = playerItem
@@ -590,7 +535,6 @@ struct GirlVideoPlayerView: View {
         }
     }
     
-    // 切换到预加载视频
     private func switchToPreloadedVideo(_ item: AVPlayerItem) {
         isLoading = false
         showCover = false
@@ -599,31 +543,25 @@ struct GirlVideoPlayerView: View {
         
         player?.replaceCurrentItem(with: item)
         
-        // 恢复历史播放进度
-        if let url = item.asset as? AVURLAsset, 
-           let videoUrlString = url.url.absoluteString as String?,
-           let historyItem = historyManager.historyItems.first(where: { $0.videoUrl == videoUrlString }) {
+        if let url = item.asset as? AVURLAsset {
+            let videoUrlString = url.url.absoluteString
+            if let historyItem = historyManager.historyItems.first(where: { $0.videoUrl == videoUrlString }) {
+                let startTime = CMTime(seconds: historyItem.playbackPosition, preferredTimescale: 1000)
+                player?.seek(to: startTime)
+            }
             
-            let startTime = CMTime(seconds: historyItem.playbackPosition, preferredTimescale: 1000)
-            player?.seek(to: startTime)
-        }
-        
-        player?.play()
-        
-        // 记录播放历史
-        if let url = item.asset as? AVURLAsset, let videoUrlString = url.url.absoluteString as String? {
             historyManager.addHistory(videoUrl: videoUrlString)
             currentVideoUrl = url.url
         }
         
-        // 监听视频时长和进度
+        player?.play()
+        
         setupPlayerObservers()
         setupDurationObserver(for: item)
         
         nextPlayerItem = nil
     }
     
-    // 音频会话设置
     private func setupAudioSession() {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: .mixWithOthers)
@@ -633,7 +571,6 @@ struct GirlVideoPlayerView: View {
         }
     }
     
-    // 监听视频时长
     private func setupDurationObserver(for playerItem: AVPlayerItem) {
         let observer = DurationObserver { duration in
             self.totalDuration = duration
@@ -642,7 +579,6 @@ struct GirlVideoPlayerView: View {
         playerItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
     }
     
-    // 播放器观察者
     private func setupPlayerObservers() {
         guard let player = player else { return }
         
@@ -652,7 +588,6 @@ struct GirlVideoPlayerView: View {
             queue: .main
         ) { _ in
             if let nextItem = self.nextPlayerItem {
-                // 保存当前进度
                 if let url = self.currentVideoUrl {
                     self.historyManager.updatePlaybackPosition(videoUrl: url.absoluteString, position: self.totalDuration)
                 }
@@ -664,7 +599,6 @@ struct GirlVideoPlayerView: View {
                 self.downloadModel.isDownloading = false
                 self.downloadModel.isCompleted = false
             } else {
-                // 保存当前进度
                 if let url = self.currentVideoUrl {
                     self.historyManager.updatePlaybackPosition(videoUrl: url.absoluteString, position: self.totalDuration)
                 }
@@ -673,18 +607,16 @@ struct GirlVideoPlayerView: View {
             }
         }
         
-        // 增强：更精准的进度更新（每秒30次）- 修复 weak self 问题
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { time in
             guard !self.isDraggingProgress, let currentItem = player.currentItem else { return }
             
             let duration = CMTimeGetSeconds(currentItem.duration)
             let currentTime = CMTimeGetSeconds(time)
             
-            if duration.isFinite && duration > 0 {
+            if (duration.isFinite && duration > 0) {
                 self.currentTime = currentTime
                 self.progress = currentTime / duration
                 
-                // 实时保存播放进度（每1秒保存一次）
                 if Int(currentTime) % 1 == 0 {
                     if let url = self.currentVideoUrl {
                         self.historyManager.updatePlaybackPosition(videoUrl: url.absoluteString, position: currentTime)
@@ -694,11 +626,9 @@ struct GirlVideoPlayerView: View {
         }
     }
     
-    // 移除观察者
     private func removePlayerObservers() {
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
         
-        // 移除时长监听
         if let observer = durationObserver, let currentItem = player?.currentItem {
             currentItem.removeObserver(observer, forKeyPath: "duration")
             self.durationObserver = nil
@@ -709,13 +639,11 @@ struct GirlVideoPlayerView: View {
         }
         timeObserver = nil
         
-        // 重置进度显示
         currentTime = 0.0
         totalDuration = 0.0
         progress = 0.0
     }
     
-    // 接口请求与视频播放
     private func loadGirlVideo() {
         isLoading = true
         showCover = true
@@ -766,7 +694,7 @@ struct GirlVideoPlayerView: View {
                             .replacingOccurrences(of: "\\/", with: "/")
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                         
-                        if !cleanUrl.hasPrefix("http") {
+                        if (!cleanUrl.hasPrefix("http")) {
                             cleanUrl = "https:\(cleanUrl)"
                         }
                         
@@ -794,19 +722,16 @@ struct GirlVideoPlayerView: View {
         }.resume()
     }
     
-    // 播放视频
     private func playVideo(with url: URL) {
         setupAudioSession()
         removePlayerObservers()
         
         let playerItem = AVPlayerItem(url: url)
         playerItem.preferredForwardBufferDuration = 10
-        playerItem.canUseNetworkResourcesForLiveStreamingWhilePaused = true
         
         DispatchQueue.main.async {
             self.player = AVPlayer(playerItem: playerItem)
             
-            // 恢复历史播放进度
             if let historyItem = self.historyManager.historyItems.first(where: { $0.videoUrl == url.absoluteString }) {
                 let startTime = CMTime(seconds: historyItem.playbackPosition, preferredTimescale: 1000)
                 self.player?.seek(to: startTime)
@@ -819,13 +744,11 @@ struct GirlVideoPlayerView: View {
                 self.showCover = false
             }
             
-            // 设置时长监听和进度监听
             self.setupDurationObserver(for: playerItem)
             self.setupPlayerObservers()
         }
     }
     
-    // 兜底视频
     private func playBackupVideo() {
         let backupUrl = URL(string: "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl1.mp4")!
         playVideo(with: backupUrl)
@@ -841,7 +764,6 @@ class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         super.init()
     }
     
-    // 监听下载进度
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         if totalBytesExpectedToWrite > 0 {
             let progress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
@@ -849,7 +771,6 @@ class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         }
     }
     
-    // 下载完成
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let videoUrl = downloadModel.videoUrl else { return }
         
@@ -874,7 +795,6 @@ class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         }
     }
     
-    // 下载失败
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error = error, (error as NSError).code != NSURLErrorCancelled {
             print("下载失败: \(error)")
@@ -982,7 +902,6 @@ struct DownloadedVideosView: View {
             downloadedVideos = fileUrls.filter { $0.pathExtension.lowercased() == "mp4" }
         } catch {
             print("加载下载列表失败: \(error)")
-            downloadedVideos = []
         }
     }
     
@@ -1058,7 +977,6 @@ struct PlayHistoryView: View {
                                         
                                         Spacer()
                                         
-                                        // 显示上次播放进度
                                         Text("进度：\(formatTime(item.playbackPosition))")
                                             .foregroundColor(.red.opacity(0.8))
                                             .font(.caption2)
@@ -1107,21 +1025,19 @@ struct PlayHistoryView: View {
     }
 }
 
-// MARK: - 历史视频播放页（修复 weak self 问题）
+// MARK: - 历史视频播放页
 struct HistoryVideoPlayerView: View {
     let videoUrl: URL
     @State private var player: AVPlayer!
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var historyManager: PlayHistoryManager
     
-    // 进度条相关变量
     @State private var currentTime: Double = 0.0
     @State private var totalDuration: Double = 0.0
     @State private var progress: Double = 0.0
     @State private var isDraggingProgress = false
     @State private var timeObserver: Any?
     
-    // KVO 监听实例
     @State private var durationObserver: DurationObserver?
     
     var body: some View {
@@ -1133,9 +1049,7 @@ struct HistoryVideoPlayerView: View {
                     .ignoresSafeArea()
             }
             
-            // 进度条和时长显示
             VStack {
-                // 进度条区域
                 VStack(spacing: 8) {
                     ZStack(alignment: .leading) {
                         Rectangle()
@@ -1153,7 +1067,7 @@ struct HistoryVideoPlayerView: View {
                             .frame(width: 8, height: 8)
                             .foregroundColor(.white)
                             .offset(x: CGFloat(progress) * (UIScreen.main.bounds.width - 40) - 4)
-                            .opacity(isDraggingProgress || player.timeControlStatus == .paused ? 1 : 0.7)
+                            .opacity(isDraggingProgress || player?.timeControlStatus == .paused ? 1 : 0.7)
                     }
                     .padding(.horizontal, 20)
                     
@@ -1175,11 +1089,9 @@ struct HistoryVideoPlayerView: View {
                 Spacer()
             }
             
-            // 返回按钮
             VStack {
                 HStack {
                     Button {
-                        // 保存进度
                         historyManager.updatePlaybackPosition(videoUrl: videoUrl.absoluteString, position: currentTime)
                         player?.pause()
                         dismiss()
@@ -1197,7 +1109,6 @@ struct HistoryVideoPlayerView: View {
             .padding(.top, 40)
             .padding(.leading, 20)
             
-            // 暂停/播放按钮
             VStack {
                 Spacer()
                 Image(systemName: player?.timeControlStatus == .playing ? "pause.circle.fill" : "play.circle.fill")
@@ -1208,10 +1119,8 @@ struct HistoryVideoPlayerView: View {
             }
         }
         .onAppear {
-            // 初始化播放器
             player = AVPlayer(url: videoUrl)
             
-            // 恢复历史播放进度
             if let historyItem = historyManager.historyItems.first(where: { $0.videoUrl == videoUrl.absoluteString }) {
                 let startTime = CMTime(seconds: historyItem.playbackPosition, preferredTimescale: 1000)
                 player.seek(to: startTime) { _ in
@@ -1221,14 +1130,12 @@ struct HistoryVideoPlayerView: View {
                 player.play()
             }
             
-            // 设置音频会话
             do {
                 try AVAudioSession.sharedInstance().setActive(true)
             } catch {
                 print("音频激活失败: \(error)")
             }
             
-            // 监听视频时长
             if let currentItem = player.currentItem {
                 let observer = DurationObserver { duration in
                     self.totalDuration = duration
@@ -1236,7 +1143,6 @@ struct HistoryVideoPlayerView: View {
                 self.durationObserver = observer
                 currentItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
                 
-                // 监听播放进度 - 修复 weak self 问题
                 timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { time in
                     guard !self.isDraggingProgress, let currentItem = player.currentItem else { return }
                     
@@ -1247,7 +1153,6 @@ struct HistoryVideoPlayerView: View {
                         self.currentTime = currentTime
                         self.progress = currentTime / duration
                         
-                        // 实时保存进度
                         if Int(currentTime) % 1 == 0 {
                             self.historyManager.updatePlaybackPosition(videoUrl: self.videoUrl.absoluteString, position: currentTime)
                         }
@@ -1256,10 +1161,8 @@ struct HistoryVideoPlayerView: View {
             }
         }
         .onDisappear {
-            // 保存最后进度
             historyManager.updatePlaybackPosition(videoUrl: videoUrl.absoluteString, position: currentTime)
             
-            // 清理资源
             player?.pause()
             if let currentItem = player?.currentItem, let observer = durationObserver {
                 currentItem.removeObserver(observer, forKeyPath: "duration")
@@ -1274,7 +1177,6 @@ struct HistoryVideoPlayerView: View {
                 player.timeControlStatus == .playing ? player.pause() : player.play()
             }
         }
-        // 进度条拖拽手势
         .gesture(
             DragGesture(minimumDistance: 1)
                 .onChanged { gesture in
@@ -1291,9 +1193,9 @@ struct HistoryVideoPlayerView: View {
                     currentTime = newProgress * totalDuration
                 }
                 .onEnded { _ in
-                    guard totalDuration > 0, let player = player else { 
+                    guard totalDuration > 0, let player = player else {
                         isDraggingProgress = false
-                        return 
+                        return
                     }
                     
                     let targetTime = CMTime(seconds: currentTime, preferredTimescale: 1000)
@@ -1308,20 +1210,18 @@ struct HistoryVideoPlayerView: View {
     }
 }
 
-// MARK: - 离线视频播放页（修复 weak self 问题）
+// MARK: - 离线视频播放页
 struct OfflineVideoPlayerView: View {
     let videoUrl: URL
     @State private var player: AVPlayer!
     @Environment(\.dismiss) private var dismiss
     
-    // 进度条相关变量
     @State private var currentTime: Double = 0.0
     @State private var totalDuration: Double = 0.0
     @State private var progress: Double = 0.0
     @State private var isDraggingProgress = false
     @State private var timeObserver: Any?
     
-    // KVO 监听实例
     @State private var durationObserver: DurationObserver?
     
     var body: some View {
@@ -1333,7 +1233,6 @@ struct OfflineVideoPlayerView: View {
                     .ignoresSafeArea()
             }
             
-            // 进度条和时长显示
             VStack {
                 VStack(spacing: 8) {
                     ZStack(alignment: .leading) {
@@ -1352,7 +1251,7 @@ struct OfflineVideoPlayerView: View {
                             .frame(width: 8, height: 8)
                             .foregroundColor(.white)
                             .offset(x: CGFloat(progress) * (UIScreen.main.bounds.width - 40) - 4)
-                            .opacity(isDraggingProgress || player.timeControlStatus == .paused ? 1 : 0.7)
+                            .opacity(isDraggingProgress || player?.timeControlStatus == .paused ? 1 : 0.7)
                     }
                     .padding(.horizontal, 20)
                     
@@ -1374,7 +1273,6 @@ struct OfflineVideoPlayerView: View {
                 Spacer()
             }
             
-            // 返回按钮
             VStack {
                 HStack {
                     Button {
@@ -1394,7 +1292,6 @@ struct OfflineVideoPlayerView: View {
             .padding(.top, 40)
             .padding(.leading, 20)
             
-            // 暂停/播放按钮
             VStack {
                 Spacer()
                 Image(systemName: player?.timeControlStatus == .playing ? "pause.circle.fill" : "play.circle.fill")
@@ -1414,7 +1311,6 @@ struct OfflineVideoPlayerView: View {
                 print("音频激活失败: \(error)")
             }
             
-            // 监听时长和进度 - 修复 weak self 问题
             if let currentItem = player.currentItem {
                 let observer = DurationObserver { duration in
                     self.totalDuration = duration
@@ -1450,7 +1346,6 @@ struct OfflineVideoPlayerView: View {
                 player.timeControlStatus == .playing ? player.pause() : player.play()
             }
         }
-        // 进度条拖拽
         .gesture(
             DragGesture(minimumDistance: 1)
                 .onChanged { gesture in
