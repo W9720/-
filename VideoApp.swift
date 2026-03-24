@@ -20,17 +20,17 @@ extension View {
 class DurationObserver: NSObject {
     private let onDurationReady: (Double) -> Void
     
-    init(onDurationReady: @escaping (Double) -> Void) {
+    初始化(onDurationReady: @escaping (Double) -> Void) {
         self.onDurationReady = onDurationReady
-        super.init()
+        超级.初始化（）
     }
     
-    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == "duration", let playerItem = object as? AVPlayerItem {
-            let duration = CMTimeGetSeconds(playerItem.duration)
-            if duration.isFinite && duration > 0 {
+    覆盖 函数 观察值(对于键路径 keyPath: String?, 对象: Any?, 变化: [NSKeyValueChangeKey : Any]?, 上下文: UnsafeMutableRawPointer?) {
+        如果 keyPath == "duration", 让 playerItem = 对象 作为? AVPlayerItem {
+            让 时长 = CMTimeGetSeconds(播放项.时长)
+            如果 持续时间.是有限的 并且 持续时间 > 0 {
                 DispatchQueue.main.async {
-                    self.onDurationReady(duration)
+                    自身.onDurationReady(时长)
                 }
             }
         }
@@ -38,32 +38,37 @@ class DurationObserver: NSObject {
 }
 
 // MARK: - 播放历史模型
-struct PlayHistoryItem: Codable, Identifiable {
-    let id = UUID()
-    let videoUrl: String
-    let playTime: Date
-    let videoName: String
-    var playbackPosition: Double = 0.0
+结构体 PlayHistoryItem： Codable, Identifiable {
+    让 id = UUID()
+    让 视频链接：字符串
+    让 游戏时间：日期
+    让 视频名称：字符串
+    var 播放位置：Double = 0.0
     
-    var fileName: String {
-        URL(string: videoUrl)?.lastPathComponent ?? "未知视频"
+    // 排除 id 字段，避免 Codable 警告
+    枚举 编码键：字符串，编码键 {
+        案例 视频链接, 播放时间, 视频名称, 播放位置
     }
     
-    var formattedTime: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MM-dd HH:mm"
-        return formatter.string(from: playTime)
+    变量 fileName：字符串 {
+        URL(string: videoUrl)?.lastPathComponent ？？ "未知视频"
+    }
+    
+    变量 格式化时间：字符串 {
+        让 格式化器 = 日期格式化器()
+        格式化器.日期格式 = "MM-dd HH:mm"
+        返回 格式化器.字符串(来自: 播放时间)
     }
 }
 
 // MARK: - 播放历史管理器
-class PlayHistoryManager: ObservableObject {
-    static let shared = PlayHistoryManager()
-    @Published var historyItems: [PlayHistoryItem] = []
-    private let maxHistoryCount = 100
-    private let userDefaultsKey = "PlayHistoryItems"
+类 PlayHistoryManager：/ObservableObject {
+    静态 让 共享 = 播放历史管理器()
+    @已发布 var 历史项目: [播放历史项目] = []
+    私人的 让 maxHistoryCount = 100
+    私有 让 用户默认键 = "播放历史项s"
     
-    private init() {
+    私有 初始化(){
         loadHistory()
     }
     
@@ -93,8 +98,8 @@ class PlayHistoryManager: ObservableObject {
     
     func addHistory(videoUrl: String) {
         let existingIndex = historyItems.firstIndex { $0.videoUrl == videoUrl }
-        if let index = existingIndex {
-            historyItems.remove(at: index)
+        如果 让 索引 = 现有索引 {
+            historyItems.移除(在: 索引)
         }
         
         let item = PlayHistoryItem(
@@ -324,23 +329,23 @@ struct GirlVideoPlayerView: View {
                 HStack {
                     Spacer()
                     
-                    ZStack {
-                        Circle()
-                            .stroke(Color.gray.opacity(0.5), lineWidth: 3)
-                            .frame(width: 44, height: 44)
-                        
-                        Circle()
-                            .trim(from: 0, to: downloadModel.progress)
-                            .stroke(Color.red, lineWidth: 3)
-                            .frame(width: 44, height: 44)
-                            .rotationEffect(.degrees(-90))
-                            .opacity(downloadModel.isDownloading ? 1 : 0)
-                        
-                        Image(systemName: downloadModel.isCompleted ? "checkmark.circle.fill" : "arrow.down.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white)
-                            .opacity(downloadModel.isDownloading ? 0.5 : 1)
-                    }
+                   ZStack {
+    Circle()
+        .stroke(Color.gray.opacity(0.5), lineWidth: 3)
+        .frame(width: 44, height: 44)
+    
+    Circle()
+        .trim(from: 0, to: CGFloat(downloadModel.progress)) // 这里强转 CGFloat
+        .stroke(Color.red, lineWidth: 3)
+        .frame(width: 44, height: 44)
+        .rotationEffect(.degrees(-90))
+        .opacity(downloadModel.isDownloading ? 1 : 0)
+    
+    Image(systemName: downloadModel.isCompleted ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+        .font(.system(size: 24))
+        .foregroundColor(.white)
+        .opacity(downloadModel.isDownloading ? 0.5 : 1)
+}
                     .padding(.trailing, 20)
                     .padding(.bottom, 20)
                     .onTapGesture {
