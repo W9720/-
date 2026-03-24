@@ -2,7 +2,7 @@ import SwiftUI
 import AVKit
 import UIKit
 import AVFoundation
-import FileManager
+import Foundation // ✅ 修复：用 Foundation 替代 FileManager
 
 // 小姐姐专属接口（稳定可访问）
 let girlVideoApi = "https://tucdn.wpon.cn/api-girl/index.php?wpon=json"
