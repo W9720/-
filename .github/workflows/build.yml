@@ -10,34 +10,49 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Install Carthage & XcodeGen
-        run: |
-          brew install carthage xcodegen
-          
-      - name: Download IJKPlayer Framework (修复版)
-        run: |
-          mkdir -p Carthage/Build/iOS
-          # 替换为稳定镜像链接
-          curl -L -o IJKMediaFramework.zip "https://cdn.jsdelivr.net/gh/iosdevlog/ijkplayer-ios-framework@master/IJKMediaFramework.framework.zip"
-          unzip -o IJKMediaFramework.zip -d Carthage/Build/iOS/ || true
-          # 验证框架是否存在
-          ls -la Carthage/Build/iOS/
-          
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
       - name: Generate Xcode Project
-        run: xcodegen generate
-          
-      - name: Build App
-        run: xcodebuild build -scheme VideoApp -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -quiet
-          
+        run: |
+          cat > project.yml << 'EOF'
+          name: VideoApp
+          options:
+            minimumOSVersion: 15.0
+          targets:
+            VideoApp:
+              type: application
+              platform: iOS
+              sources:
+                - path: .
+                  excludes:
+                    - .git
+                    - .github
+              settings:
+                CODE_SIGN_IDENTITY: ""
+                CODE_SIGNING_REQUIRED: NO
+                CODE_SIGNING_ALLOWED: NO
+                IPHONEOS_DEPLOYMENT_TARGET: 15.0
+                PRODUCT_NAME: VideoApp
+                EXECUTABLE_NAME: VideoApp
+          EOF
+          xcodegen generate
+
+      - name: Build
+        run: xcodebuild build -scheme VideoApp -destination 'generic/platform=iOS' -quiet
+
+      - name: Verify App Bundle
+        run: ls -la ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphoneos/VideoApp.app/
+
       - name: Make IPA
         run: |
           mkdir -p Payload
           cp -r ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphoneos/VideoApp.app Payload/
-          # 确保框架复制成功
-          cp -r Carthage/Build/iOS/IJKMediaFramework.framework Payload/VideoApp.app/Frameworks/ || true
+          # 确认主二进制存在
+          ls -la Payload/VideoApp.app/
           zip -r VideoApp-TrollStore.ipa Payload/
-          
+
       - uses: actions/upload-artifact@v4
         with:
           name: VideoApp-TrollStore
