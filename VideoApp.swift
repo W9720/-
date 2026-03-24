@@ -1337,3 +1337,109 @@ struct OfflineVideoPlayerView: View {
                 Spacer()
             }
         }
+        .onAppear {
+            player = AVPlayer(url: videoUrl)
+            player.play()
+            
+            do {
+                try AVAudioSession.sharedInstance().setActive(true)
+            } catch {
+                print("音频激活失败: \(error)")
+            }
+            
+            if let currentItem = player.currentItem {
+                let observer = DurationObserver { duration in
+                    self.totalDuration = duration
+                }
+                self.durationObserver = observer
+                currentItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
+                
+                timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { time in
+                    guard !self.isDraggingProgress, let currentItem = player.currentItem else { return }
+                    
+                    let duration = CMTimeGetSeconds(currentItem.duration)
+                    let currentTime = CMTimeGetSeconds(time)
+                    
+                    if duration.isFinite && duration > 0 {
+                        self.currentTime = currentTime
+                        self.progress = currentTime / duration
+                    }
+                }
+            }
+        }
+        .onDisappear {
+            player?.pause()
+            if let currentItem = player?.currentItem, let observer = durationObserver {
+                currentItem.removeObserver(observer, forKeyPath: "duration")
+                self.durationObserver = nil
+            }
+            if let observer = timeObserver, let player = player {
+                player.removeTimeObserver(observer)
+            }
+        }
+        .onTapGesture {
+            if let player = player {
+                player.timeControlStatus == .playing ? player.pause() : player.play()
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { gesture in
+                    guard totalDuration > 0 else { return }
+                    
+                    isDraggingProgress = true
+                    player?.pause()
+                    
+                    let xPosition = gesture.location.x
+                    let maxWidth = UIScreen.main.bounds.width - 40
+                    let newProgress = max(0, min(1, xPosition / maxWidth))
+                    
+                    progress = newProgress
+                    currentTime = newProgress * totalDuration
+                }
+                .onEnded { _ in
+                    guard totalDuration > 0, let player = player else {
+                        isDraggingProgress = false
+                        return
+                    }
+                    
+                    let targetTime = CMTime(seconds: currentTime, preferredTimescale: 1000)
+                    player.seek(to: targetTime) { _ in
+                        self.isDraggingProgress = false
+                        player.play()
+                    }
+                }
+        )
+        .preferredColorScheme(.dark)
+    }
+}
+
+// MARK: - 原生播放层
+struct VideoPlayerLayer: UIViewRepresentable {
+    let player: AVPlayer
+    
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: UIScreen.main.bounds)
+        view.backgroundColor = .black
+        
+        let playerLayer = AVPlayerLayer(player: player)
+        playerLayer.frame = view.bounds
+        playerLayer.videoGravity = .resizeAspectFill
+        
+        playerLayer.shouldRasterize = true
+        playerLayer.rasterizationScale = UIScreen.main.scale
+        playerLayer.needsDisplayOnBoundsChange = false
+        
+        view.layer.addSublayer(playerLayer)
+        view.layer.displayIfNeeded()
+        return view
+    }
+    
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            if let layer = uiView.layer.sublayers?.first as? AVPlayerLayer {
+                layer.player = self.player
+            }
+        }
+    }
+}
