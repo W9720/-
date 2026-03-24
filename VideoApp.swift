@@ -2,20 +2,36 @@ import SwiftUI
 import AVKit
 import UIKit
 import AVFoundation
-import Foundation // ✅ 修复：用 Foundation 替代 FileManager
+import Foundation
 
-// 小姐姐专属接口（稳定可访问）
-let girlVideoApi = "https://tucdn.wpon.cn/api-girl/index.php?wpon=json"
-// 封面图地址（解决黑屏）
-let videoCoverImage = "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl-cover.jpg"
+// MARK: - KVO 时长监听封装类（解决 override 关键字报错）
+class DurationObserver: NSObject {
+    private let onDurationReady: (Double) -> Void
+    
+    init(onDurationReady: @escaping (Double) -> Void) {
+        self.onDurationReady = onDurationReady
+        super.init()
+    }
+    
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        if keyPath == "duration", let playerItem = object as? AVPlayerItem {
+            let duration = CMTimeGetSeconds(playerItem.duration)
+            if duration.isFinite && duration > 0 {
+                DispatchQueue.main.async {
+                    self.onDurationReady(duration)
+                }
+            }
+        }
+    }
+}
 
-// ✅ 播放历史模型
+// MARK: - 播放历史模型
 struct PlayHistoryItem: Codable, Identifiable {
     let id = UUID()
     let videoUrl: String
     let playTime: Date
     let videoName: String
-    var playbackPosition: Double = 0.0 // ✅ 新增：播放进度（秒）
+    var playbackPosition: Double = 0.0 // 播放进度（秒）
     
     // 计算属性：获取视频文件名
     var fileName: String {
@@ -30,7 +46,7 @@ struct PlayHistoryItem: Codable, Identifiable {
     }
 }
 
-// ✅ 播放历史管理器（单例）
+// MARK: - 播放历史管理器（单例）
 class PlayHistoryManager: ObservableObject {
     static let shared = PlayHistoryManager()
     @Published var historyItems: [PlayHistoryItem] = []
@@ -116,6 +132,7 @@ class PlayHistoryManager: ObservableObject {
     }
 }
 
+// MARK: - 主应用入口
 @main
 struct VideoApp: App {
     // 注入历史管理器
@@ -159,7 +176,7 @@ struct VideoApp: App {
     }
 }
 
-// 欢迎页（原有逻辑完全保留）
+// MARK: - 欢迎页
 struct SplashView: View {
     @State private var showVideo = false
     
@@ -194,7 +211,7 @@ struct SplashView: View {
     }
 }
 
-// 下载进度模型
+// MARK: - 下载进度模型
 class DownloadTaskModel: ObservableObject {
     @Published var progress: Float = 0.0
     @Published var isDownloading = false
@@ -203,7 +220,7 @@ class DownloadTaskModel: ObservableObject {
     var videoUrl: URL?
 }
 
-// ✅ 时间格式化工具（新增）
+// MARK: - 时间格式化工具
 func formatTime(_ seconds: Double) -> String {
     let totalSeconds = Int(seconds)
     let minutes = totalSeconds / 60
@@ -211,7 +228,7 @@ func formatTime(_ seconds: Double) -> String {
     return String(format: "%02d:%02d", minutes, seconds)
 }
 
-// 核心播放页（集成进度条+时长显示）
+// MARK: - 核心播放页（集成进度条+时长显示）
 struct GirlVideoPlayerView: View {
     // 原有变量
     @State private var currentVideoUrl: URL?
@@ -231,11 +248,19 @@ struct GirlVideoPlayerView: View {
     // 注入历史管理器
     @EnvironmentObject private var historyManager: PlayHistoryManager
     
-    // ✅ 新增：进度条相关变量
+    // 进度条相关变量
     @State private var currentTime: Double = 0.0       // 当前播放时间（秒）
     @State private var totalDuration: Double = 0.0     // 视频总时长（秒）
     @State private var progress: Double = 0.0          // 播放进度（0-1）
     @State private var isDraggingProgress = false      // 是否正在拖拽进度条
+    
+    // KVO 监听实例
+    @State private var durationObserver: DurationObserver?
+    
+    // 小姐姐专属接口（稳定可访问）
+    let girlVideoApi = "https://tucdn.wpon.cn/api-girl/index.php?wpon=json"
+    // 封面图地址（解决黑屏）
+    let videoCoverImage = "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl-cover.jpg"
     
     var body: some View {
         ZStack {
@@ -269,7 +294,7 @@ struct GirlVideoPlayerView: View {
                 }
             }
             
-            // ✅ 新增：进度条和时长显示区域
+            // 进度条和时长显示区域
             VStack {
                 // 进度条
                 VStack(spacing: 8) {
@@ -393,7 +418,7 @@ struct GirlVideoPlayerView: View {
             player?.pause()
             nextPlayerItem = nil
             
-            // ✅ 保存最后播放进度
+            // 保存最后播放进度
             if let url = currentVideoUrl {
                 historyManager.updatePlaybackPosition(videoUrl: url.absoluteString, position: currentTime)
             }
@@ -429,7 +454,7 @@ struct GirlVideoPlayerView: View {
                     }
                 }
         )
-        // ✅ 新增：进度条拖拽手势
+        // 进度条拖拽手势
         .gesture(
             DragGesture(minimumDistance: 1)
                 .onChanged { gesture in
@@ -501,6 +526,7 @@ struct GirlVideoPlayerView: View {
         }
     }
     
+    // MARK: - 视频加载相关方法
     // 封面图预加载
     private func loadCoverImage() {
         guard let url = URL(string: videoCoverImage) else { return }
@@ -516,7 +542,7 @@ struct GirlVideoPlayerView: View {
     // 预加载下一个视频
     private func preloadNextVideo() {
         DispatchQueue.global(qos: .userInitiated).async {
-            guard let url = URL(string: girlVideoApi) else { return }
+            guard let url = URL(string: self.girlVideoApi) else { return }
             
             let config = URLSessionConfiguration.default
             config.timeoutIntervalForRequest = 8
@@ -573,7 +599,7 @@ struct GirlVideoPlayerView: View {
         
         player?.replaceCurrentItem(with: item)
         
-        // ✅ 恢复历史播放进度
+        // 恢复历史播放进度
         if let url = item.asset as? AVURLAsset, 
            let videoUrlString = url.url.absoluteString as String?,
            let historyItem = historyManager.historyItems.first(where: { $0.videoUrl == videoUrlString }) {
@@ -590,7 +616,7 @@ struct GirlVideoPlayerView: View {
             currentVideoUrl = url.url
         }
         
-        // ✅ 监听视频时长和进度
+        // 监听视频时长和进度
         setupPlayerObservers()
         setupDurationObserver(for: item)
         
@@ -607,32 +633,13 @@ struct GirlVideoPlayerView: View {
         }
     }
     
-    // ✅ 新增：监听视频时长
+    // 监听视频时长
     private func setupDurationObserver(for playerItem: AVPlayerItem) {
-        // 监听视频时长加载完成
-        playerItem.addObserver(self, forKeyPath: "duration", options: [.new, .initial], context: nil)
-        
-        // 立即获取时长（如果已加载）
-        if playerItem.status == .readyToPlay {
-            let duration = CMTimeGetSeconds(playerItem.duration)
-            if duration.isFinite && duration > 0 {
-                DispatchQueue.main.async {
-                    self.totalDuration = duration
-                }
-            }
+        let observer = DurationObserver { duration in
+            self.totalDuration = duration
         }
-    }
-    
-    // ✅ 重写KVO监听方法
-    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == "duration", let playerItem = object as? AVPlayerItem {
-            let duration = CMTimeGetSeconds(playerItem.duration)
-            if duration.isFinite && duration > 0 {
-                DispatchQueue.main.async {
-                    self.totalDuration = duration
-                }
-            }
-        }
+        self.durationObserver = observer
+        playerItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
     }
     
     // 播放器观察者
@@ -666,7 +673,7 @@ struct GirlVideoPlayerView: View {
             }
         }
         
-        // ✅ 增强：更精准的进度更新（每秒30次）
+        // 增强：更精准的进度更新（每秒30次）
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { [weak self] time in
             guard let self = self, !self.isDraggingProgress, let currentItem = player.currentItem else { return }
             
@@ -691,8 +698,11 @@ struct GirlVideoPlayerView: View {
     private func removePlayerObservers() {
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
         
-        // ✅ 移除时长监听
-        player?.currentItem?.removeObserver(self, forKeyPath: "duration")
+        // 移除时长监听
+        if let observer = durationObserver, let currentItem = player?.currentItem {
+            currentItem.removeObserver(observer, forKeyPath: "duration")
+            self.durationObserver = nil
+        }
         
         if let observer = timeObserver, let player = player {
             player.removeTimeObserver(observer)
@@ -796,7 +806,7 @@ struct GirlVideoPlayerView: View {
         DispatchQueue.main.async {
             self.player = AVPlayer(playerItem: playerItem)
             
-            // ✅ 恢复历史播放进度
+            // 恢复历史播放进度
             if let historyItem = self.historyManager.historyItems.first(where: { $0.videoUrl == url.absoluteString }) {
                 let startTime = CMTime(seconds: historyItem.playbackPosition, preferredTimescale: 1000)
                 self.player?.seek(to: startTime)
@@ -809,7 +819,7 @@ struct GirlVideoPlayerView: View {
                 self.showCover = false
             }
             
-            // ✅ 设置时长监听和进度监听
+            // 设置时长监听和进度监听
             self.setupDurationObserver(for: playerItem)
             self.setupPlayerObservers()
         }
@@ -822,7 +832,7 @@ struct GirlVideoPlayerView: View {
     }
 }
 
-// 下载代理类
+// MARK: - 下载代理类
 class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     private let downloadModel: DownloadTaskModel
     
@@ -873,12 +883,12 @@ class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     }
 }
 
-// 下载完成通知
+// MARK: - 下载完成通知
 extension Notification.Name {
     static let downloadCompleted = Notification.Name("downloadCompleted")
 }
 
-// 我的下载页面
+// MARK: - 我的下载页面
 struct DownloadedVideosView: View {
     @State private var downloadedVideos: [URL] = []
     @State private var selectedVideoUrl: URL?
@@ -1004,7 +1014,7 @@ struct DownloadedVideosView: View {
     }
 }
 
-// 播放历史页面
+// MARK: - 播放历史页面
 struct PlayHistoryView: View {
     @EnvironmentObject private var historyManager: PlayHistoryManager
     @State private var selectedVideoUrl: String?
@@ -1048,7 +1058,7 @@ struct PlayHistoryView: View {
                                         
                                         Spacer()
                                         
-                                        // ✅ 显示上次播放进度
+                                        // 显示上次播放进度
                                         Text("进度：\(formatTime(item.playbackPosition))")
                                             .foregroundColor(.red.opacity(0.8))
                                             .font(.caption2)
@@ -1097,19 +1107,22 @@ struct PlayHistoryView: View {
     }
 }
 
-// ✅ 历史视频播放页（升级进度条功能）
+// MARK: - 历史视频播放页
 struct HistoryVideoPlayerView: View {
     let videoUrl: URL
     @State private var player: AVPlayer!
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var historyManager: PlayHistoryManager
     
-    // ✅ 进度条相关变量
+    // 进度条相关变量
     @State private var currentTime: Double = 0.0
     @State private var totalDuration: Double = 0.0
     @State private var progress: Double = 0.0
     @State private var isDraggingProgress = false
     @State private var timeObserver: Any?
+    
+    // KVO 监听实例
+    @State private var durationObserver: DurationObserver?
     
     var body: some View {
         ZStack {
@@ -1120,7 +1133,7 @@ struct HistoryVideoPlayerView: View {
                     .ignoresSafeArea()
             }
             
-            // ✅ 进度条和时长显示
+            // 进度条和时长显示
             VStack {
                 // 进度条区域
                 VStack(spacing: 8) {
@@ -1217,7 +1230,11 @@ struct HistoryVideoPlayerView: View {
             
             // 监听视频时长
             if let currentItem = player.currentItem {
-                currentItem.addObserver(self, forKeyPath: "duration", options: [.new, .initial], context: nil)
+                let observer = DurationObserver { duration in
+                    self.totalDuration = duration
+                }
+                self.durationObserver = observer
+                currentItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
                 
                 // 监听播放进度
                 timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { [weak self] time in
@@ -1244,8 +1261,9 @@ struct HistoryVideoPlayerView: View {
             
             // 清理资源
             player?.pause()
-            if let currentItem = player?.currentItem {
-                currentItem.removeObserver(self, forKeyPath: "duration")
+            if let currentItem = player?.currentItem, let observer = durationObserver {
+                currentItem.removeObserver(observer, forKeyPath: "duration")
+                self.durationObserver = nil
             }
             if let observer = timeObserver, let player = player {
                 player.removeTimeObserver(observer)
@@ -1288,21 +1306,9 @@ struct HistoryVideoPlayerView: View {
         )
         .preferredColorScheme(.dark)
     }
-    
-    // KVO监听时长
-    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == "duration", let playerItem = object as? AVPlayerItem {
-            let duration = CMTimeGetSeconds(playerItem.duration)
-            if duration.isFinite && duration > 0 {
-                DispatchQueue.main.async {
-                    self.totalDuration = duration
-                }
-            }
-        }
-    }
 }
 
-// ✅ 离线视频播放页（升级进度条功能）
+// MARK: - 离线视频播放页
 struct OfflineVideoPlayerView: View {
     let videoUrl: URL
     @State private var player: AVPlayer!
@@ -1314,6 +1320,9 @@ struct OfflineVideoPlayerView: View {
     @State private var progress: Double = 0.0
     @State private var isDraggingProgress = false
     @State private var timeObserver: Any?
+    
+    // KVO 监听实例
+    @State private var durationObserver: DurationObserver?
     
     var body: some View {
         ZStack {
@@ -1407,7 +1416,11 @@ struct OfflineVideoPlayerView: View {
             
             // 监听时长和进度
             if let currentItem = player.currentItem {
-                currentItem.addObserver(self, forKeyPath: "duration", options: [.new, .initial], context: nil)
+                let observer = DurationObserver { duration in
+                    self.totalDuration = duration
+                }
+                self.durationObserver = observer
+                currentItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
                 
                 timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { [weak self] time in
                     guard let self = self, !self.isDraggingProgress, let currentItem = player.currentItem else { return }
@@ -1424,8 +1437,9 @@ struct OfflineVideoPlayerView: View {
         }
         .onDisappear {
             player?.pause()
-            if let currentItem = player?.currentItem {
-                currentItem.removeObserver(self, forKeyPath: "duration")
+            if let currentItem = player?.currentItem, let observer = durationObserver {
+                currentItem.removeObserver(observer, forKeyPath: "duration")
+                self.durationObserver = nil
             }
             if let observer = timeObserver, let player = player {
                 player.removeTimeObserver(observer)
@@ -1467,20 +1481,9 @@ struct OfflineVideoPlayerView: View {
         )
         .preferredColorScheme(.dark)
     }
-    
-    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == "duration", let playerItem = object as? AVPlayerItem {
-            let duration = CMTimeGetSeconds(playerItem.duration)
-            if duration.isFinite && duration > 0 {
-                DispatchQueue.main.async {
-                    self.totalDuration = duration
-                }
-            }
-        }
-    }
 }
 
-// 原生播放层
+// MARK: - 原生播放层
 struct VideoPlayerLayer: UIViewRepresentable {
     let player: AVPlayer
     
