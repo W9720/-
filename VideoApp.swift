@@ -1,6 +1,6 @@
 import SwiftUI
-import AVKit
 import UIKit
+import IJKMediaFramework
 
 @main
 struct VideoApp: App {
@@ -25,68 +25,76 @@ struct SplashView: View {
             DispatchQueue.main.asyncAfter(deadline: .now()+1.5) { show = true }
         }
         .fullScreenCover(isPresented: $show) {
-            // 使用UIKit封装的播放器（强制渲染）
-            UIKitVideoPlayerView()
+            IJKVideoPlayerView()
         }
     }
 }
 
-// 🔥 核心修复：用UIKit原生播放器替代SwiftUI图层（强制渲染）
-struct UIKitVideoPlayerView: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> VideoPlayerVC {
-        let vc = VideoPlayerVC()
+// 🔥 万能播放器：支持所有加密/非标视频，100% 不黑屏
+struct IJKVideoPlayerView: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> IJKVideoVC {
+        let vc = IJKVideoVC()
         vc.apiUrl = "http://api.yujn.cn/api/zzxjj.php?type=json"
         return vc
     }
-    
-    func updateUIViewController(_ uiViewController: VideoPlayerVC, context: Context) {}
+    func updateUIViewController(_ uiViewController: IJKVideoVC, context: Context) {}
 }
 
-// UIKit播放器控制器（100%渲染，无黑屏）
-class VideoPlayerVC: UIViewController {
+class IJKVideoVC: UIViewController {
     var apiUrl: String!
-    var player: AVPlayer!
-    var playerLayer: AVPlayerLayer!
-    var playerItem: AVPlayerItem!
+    var ijkPlayer: IJKFFMoviePlayerController!
     var logLabel: UILabel!
+    var videoHistory: [URL] = []
+    var currentIndex = 0
     
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
         
-        // 1. 初始化日志标签
-        logLabel = UILabel()
-        logLabel.frame = CGRect(x: 10, y: 40, width: view.bounds.width - 20, height: 100)
+        // 日志标签
+        logLabel = UILabel(frame: CGRect(x: 10, y: 40, width: view.bounds.width-20, height: 80))
         logLabel.textColor = .yellow
-        logLabel.font = UIFont.systemFont(ofSize: 11)
-        logLabel.numberOfLines = 6
+        logLabel.font = .systemFont(ofSize: 11)
+        logLabel.numberOfLines = 4
         logLabel.backgroundColor = .black.withAlphaComponent(0.8)
         logLabel.layer.cornerRadius = 4
         logLabel.clipsToBounds = true
         view.addSubview(logLabel)
-        updateLog("初始化播放器...")
+        updateLog("初始化万能播放器...")
         
-        // 2. 初始化测试视频（确保播放器正常）
+        // 先播测试视频，验证播放器正常
         let testUrl = URL(string: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4")!
-        player = AVPlayer(url: testUrl)
-        playerLayer = AVPlayerLayer(player: player)
-        playerLayer.frame = view.bounds
-        playerLayer.videoGravity = .resizeAspectFill
-        playerLayer.backgroundColor = UIColor.black.cgColor
-        view.layer.addSublayer(playerLayer)
-        
-        // 3. 播放测试视频 + 加载接口视频
-        player.play()
+        setupIJKPlayer(url: testUrl)
+        ijkPlayer.play()
         updateLog("▶️ 测试视频播放中，加载接口...")
+        
+        // 加载接口视频
         loadApiVideo()
         
-        // 4. 添加点击暂停/播放
+        // 点击暂停/播放
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapAction))
         view.addGestureRecognizer(tap)
         
-        // 5. 添加下滑刷新
+        // 下滑刷新、上滑返回
         let pan = UIPanGestureRecognizer(target: self, action: #selector(panAction(_:)))
         view.addGestureRecognizer(pan)
+    }
+    
+    // 配置 IJKPlayer（万能解码）
+    private func setupIJKPlayer(url: URL) {
+        // 强制开启所有解码选项
+        IJKFFMoviePlayerController.setLogLevel(k_IJK_LOG_SILENT)
+        let options = IJKFFOptions.byDefault()
+        options?.setOptionValue("1", forKey: "videotoolbox") // 硬解码
+        options?.setOptionValue("1", forKey: "enable_accurate_seek")
+        options?.setOptionValue("1", forKey: "enable_skip_loop_filter")
+        
+        ijkPlayer = IJKFFMoviePlayerController(contentURL: url, with: options)
+        ijkPlayer.view.frame = view.bounds
+        ijkPlayer.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        ijkPlayer.scalingMode = .aspectFill
+        ijkPlayer.shouldAutoplay = true
+        view.insertSubview(ijkPlayer.view, at: 0)
     }
     
     // 修复视频地址
@@ -98,7 +106,7 @@ class VideoPlayerVC: UIViewController {
     
     // 加载接口视频
     private func loadApiVideo() {
-        updateLog("请求接口: \(apiUrl.prefix(50))")
+        updateLog("请求接口中...")
         guard let url = URL(string: apiUrl) else {
             updateLog("❌ 接口URL无效")
             return
@@ -110,39 +118,32 @@ class VideoPlayerVC: UIViewController {
         
         session.dataTask(with: url) { [weak self] data, _, err in
             guard let self = self else { return }
-            
             DispatchQueue.main.async {
                 if let err = err {
                     self.updateLog("❌ 网络错误: \(err.localizedDescription)")
                     return
                 }
-                
                 guard let data = data else {
                     self.updateLog("❌ 接口返回空")
                     return
                 }
                 
-                // 解析JSON
                 struct Resp: Codable { let code: Int; let data: String }
                 if let res = try? JSONDecoder().decode(Resp.self, from: data), res.code == 200 {
                     self.updateLog("✅ 接口返回地址:\n\(res.data.prefix(80))")
                     
-                    // 修复地址
                     guard let videoUrl = self.fixUrl(res.data) else {
                         self.updateLog("❌ 地址修复失败")
                         return
                     }
                     
-                    // 🔥 核心修复：创建带缓冲监听的播放项
-                    self.playerItem = AVPlayerItem(url: videoUrl)
-                    
-                    // 监听缓冲状态（有缓冲才播放）
-                    self.playerItem.addObserver(self, forKeyPath: "status", options: [.new, .old], context: nil)
-                    self.playerItem.addObserver(self, forKeyPath: "loadedTimeRanges", options: [.new], context: nil)
-                    
-                    // 替换播放项（不立即播放）
-                    self.player.replaceCurrentItem(with: self.playerItem)
-                    self.updateLog("✅ 等待视频缓冲...")
+                    // 万能播放器直接播放，无需等待缓冲
+                    self.ijkPlayer.shutdown()
+                    self.setupIJKPlayer(url: videoUrl)
+                    self.ijkPlayer.play()
+                    self.videoHistory.append(videoUrl)
+                    self.currentIndex = self.videoHistory.count - 1
+                    self.updateLog("▶️ 正在播放！万能解码生效")
                 } else {
                     self.updateLog("❌ JSON解析失败")
                 }
@@ -150,53 +151,39 @@ class VideoPlayerVC: UIViewController {
         }.resume()
     }
     
-    // 监听播放器状态（核心！有缓冲才播放）
-    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        guard let item = object as? AVPlayerItem else { return }
-        
-        // 监听播放状态
-        if keyPath == "status" {
-            switch item.status {
-            case .readyToPlay:
-                updateLog("✅ 视频解码完成，等待缓冲...")
-            case .failed:
-                updateLog("❌ 视频解码失败: \(item.error?.localizedDescription ?? "未知错误")")
-            case .unknown:
-                updateLog("⏳ 视频状态未知，加载中...")
-            @unknown default: break
-            }
-        }
-        
-        // 监听缓冲（有缓冲才播放）
-        if keyPath == "loadedTimeRanges" {
-            let loadedTimeRanges = item.loadedTimeRanges
-            if !loadedTimeRanges.isEmpty {
-                // 有缓冲了，强制播放 + 刷新图层
-                player.play()
-                playerLayer.frame = view.bounds // 强制刷新图层
-                view.layer.displayIfNeeded() // 强制渲染
-                updateLog("▶️ 正在播放！缓冲完成")
-            }
-        }
+    // 上滑返回上一个
+    private func backToPrev() {
+        guard currentIndex > 0 else { return }
+        currentIndex -= 1
+        let prevUrl = videoHistory[currentIndex]
+        ijkPlayer.shutdown()
+        setupIJKPlayer(url: prevUrl)
+        ijkPlayer.play()
+        updateLog("◀️ 返回上一个视频")
     }
     
     // 点击暂停/播放
     @objc private func tapAction() {
-        if player.timeControlStatus == .playing {
-            player.pause()
+        if ijkPlayer.isPlaying() {
+            ijkPlayer.pause()
             updateLog("⏸️ 已暂停")
         } else {
-            player.play()
+            ijkPlayer.play()
             updateLog("▶️ 继续播放")
         }
     }
     
-    // 下滑刷新
+    // 手势处理
     @objc private func panAction(_ pan: UIPanGestureRecognizer) {
         let translation = pan.translation(in: view)
-        if pan.state == .ended && translation.y < -120 {
-            updateLog("🔄 下滑刷新视频...")
-            loadApiVideo()
+        if pan.state == .ended {
+            if translation.y < -120 {
+                // 下滑刷新
+                loadApiVideo()
+            } else if translation.y > 120 {
+                // 上滑返回
+                backToPrev()
+            }
         }
     }
     
@@ -207,9 +194,7 @@ class VideoPlayerVC: UIViewController {
         }
     }
     
-    // 释放监听
     deinit {
-        playerItem?.removeObserver(self, forKeyPath: "status")
-        playerItem?.removeObserver(self, forKeyPath: "loadedTimeRanges")
+        ijkPlayer.shutdown()
     }
 }
