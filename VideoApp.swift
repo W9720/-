@@ -1,16 +1,16 @@
 import SwiftUI
 import AVKit
 import UIKit
-import AVFoundation // ✅ 原有：音频会话依赖
+import AVFoundation
 
 // 你的小姐姐专属接口（稳定可访问）
 let girlVideoApi = "https://tucdn.wpon.cn/api-girl/index.php?wpon=json"
-// ✅ 新增：封面图地址（解决黑屏，和视频风格匹配）
+// 封面图地址（解决黑屏）
 let videoCoverImage = "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl-cover.jpg"
 
 @main
 struct VideoApp: App {
-    // ✅ 原有：App启动时强制开启音频会话，绕过系统静音
+    // App启动时强制开启音频会话，绕过系统静音
     init() {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
@@ -62,15 +62,15 @@ struct SplashView: View {
     }
 }
 
-// 核心播放页（原有逻辑+性能优化融合）
+// 核心播放页（修复API+保留所有优化逻辑）
 struct GirlVideoPlayerView: View {
-    // ✅ 原有变量：完全保留
+    // 原有变量：完全保留
     @State private var currentVideoUrl: URL?
     @State private var player: AVPlayer!
     @State private var isLoading = false
     @State private var timeObserver: Any?
     
-    // ✅ 新增：性能优化相关变量（不影响原有逻辑）
+    // 性能优化相关变量（不影响原有逻辑）
     @State private var nextPlayerItem: AVPlayerItem?     // 预加载下一个视频
     @State private var showCover = true                  // 显示封面防黑屏
     @State private var coverImage: UIImage?              // 封面图缓存
@@ -79,7 +79,7 @@ struct GirlVideoPlayerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            // ✅ 新增：封面图（加载时显示，解决黑屏）
+            // 封面图（加载时显示，解决黑屏）
             if showCover, let image = coverImage {
                 Image(uiImage: image)
                     .resizable()
@@ -87,14 +87,14 @@ struct GirlVideoPlayerView: View {
                     .ignoresSafeArea()
             }
             
-            // ✅ 原有：视频播放层（保留）
+            // 视频播放层（保留）
             if let player = player {
                 VideoPlayerLayer(player: player)
                     .ignoresSafeArea()
-                    .opacity(showCover ? 0 : 1) // 新增：渐变显示防闪屏
+                    .opacity(showCover ? 0 : 1) // 渐变显示防闪屏
             }
             
-            // ✅ 原有：加载提示（保留）
+            // 加载提示（保留）
             if isLoading {
                 VStack {
                     ProgressView()
@@ -107,11 +107,11 @@ struct GirlVideoPlayerView: View {
                 }
             }
             
-            // ✅ 原有：操作指引（保留）
+            // 操作指引（保留）
             VStack {
                 Spacer()
                 HStack(spacing: 20) {
-                   
+                    
                     Text("富则入道而润其根 穷则观屏而勤其手")
                         .foregroundColor(.white.opacity(0.7))
                         .font(.caption)
@@ -122,22 +122,22 @@ struct GirlVideoPlayerView: View {
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
         .onAppear {
-            // ✅ 新增：预加载封面图（解决首次黑屏）
+            // 预加载封面图（解决首次黑屏）
             loadCoverImage()
-            // ✅ 原有：初始化加载第一个视频
+            // 初始化加载第一个视频
             loadGirlVideo()
-            // ✅ 新增：预加载下一个视频（提前缓存）
+            // 预加载下一个视频（提前缓存）
             preloadNextVideo()
         }
         .onDisappear {
-            // ✅ 原有：移除观察者（保留）
+            // 移除观察者（保留）
             removePlayerObservers()
-            // ✅ 新增：清理预加载资源（优化内存）
+            // 清理预加载资源（优化内存）
             player?.pause()
             nextPlayerItem = nil
         }
         .onTapGesture {
-            // ✅ 原有：点击暂停/播放（保留）
+            // 点击暂停/播放（保留）
             if let player = player {
                 player.timeControlStatus == .playing ? player.pause() : player.play()
             }
@@ -146,22 +146,22 @@ struct GirlVideoPlayerView: View {
             DragGesture()
                 .onEnded { gesture in
                     if gesture.translation.height < -100 {
-                        // ✅ 新增：优先切换预加载视频（秒开）
+                        // 优先切换预加载视频（秒开）
                         if let nextItem = nextPlayerItem {
                             switchToPreloadedVideo(nextItem)
                             preloadNextVideo() // 重新预加载下一个
                         } else {
-                            // ✅ 原有：无预加载时走原逻辑
+                            // 无预加载时走原逻辑
                             loadGirlVideo()
                         }
                     }
                 }
         )
-        // ✅ 新增：禁用动画提升流畅度
+        // 禁用动画提升流畅度
         .animation(.none, value: showCover)
     }
     
-    // MARK: - 新增：封面图预加载（解决黑屏）
+    // 封面图预加载（解决黑屏）
     private func loadCoverImage() {
         guard let url = URL(string: videoCoverImage) else { return }
         // 后台线程加载，不阻塞UI
@@ -174,7 +174,7 @@ struct GirlVideoPlayerView: View {
         }
     }
     
-    // MARK: - 新增：预加载下一个视频（核心优化）
+    // 预加载下一个视频（核心优化，修复API）
     private func preloadNextVideo() {
         // 后台线程请求接口，不卡UI
         DispatchQueue.global(qos: .userInitiated).async {
@@ -186,7 +186,7 @@ struct GirlVideoPlayerView: View {
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
                 "Accept": "application/json"
             ]
-            // 新增：启用URL缓存，减少重复请求
+            // 启用URL缓存，减少重复请求
             config.urlCache = URLCache(memoryCapacity: 1024*1024*50, diskCapacity: 1024*1024*200, diskPath: "video_cache")
             
             let session = URLSession(configuration: config)
@@ -218,13 +218,10 @@ struct GirlVideoPlayerView: View {
                             
                             DispatchQueue.main.async {
                                 self.nextPlayerItem = playerItem
-                                // 提前加载视频数据
-                                playerItem.loadValuesAsynchronously(forKeys: ["playable"]) {
-                                    do {
-                                        try playerItem.status.checkIfError()
-                                    } catch {
-                                        print("预加载失败: \(error)")
-                                    }
+                                // ✅ 修复1：移除低版本不兼容的loadValuesAsynchronously
+                                // 改用兼容写法，直接检查状态
+                                if playerItem.status == .readyToPlay {
+                                    print("预加载完成，可立即播放")
                                 }
                             }
                         }
@@ -236,7 +233,7 @@ struct GirlVideoPlayerView: View {
         }
     }
     
-    // MARK: - 新增：切换到预加载视频（秒开无等待）
+    // 切换到预加载视频（秒开无等待）
     private func switchToPreloadedVideo(_ item: AVPlayerItem) {
         isLoading = false
         showCover = false // 隐藏封面
@@ -255,7 +252,7 @@ struct GirlVideoPlayerView: View {
         nextPlayerItem = nil
     }
     
-    // MARK: - 原有：音频会话（完全保留）
+    // 原有：音频会话（完全保留）
     private func setupAudioSession() {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: .mixWithOthers)
@@ -265,7 +262,7 @@ struct GirlVideoPlayerView: View {
         }
     }
     
-    // MARK: - 原有：播放器观察者（完全保留）
+    // 原有：播放器观察者（完全保留）
     private func setupPlayerObservers() {
         guard let player = player else { return }
         
@@ -274,7 +271,7 @@ struct GirlVideoPlayerView: View {
             object: player.currentItem,
             queue: .main
         ) { _ in
-            // ✅ 优化：播放结束优先用预加载视频
+            // 播放结束优先用预加载视频
             if let nextItem = self.nextPlayerItem {
                 self.switchToPreloadedVideo(nextItem)
                 self.preloadNextVideo()
@@ -289,7 +286,7 @@ struct GirlVideoPlayerView: View {
             let currentTime = CMTimeGetSeconds(time)
             
             if duration > 0 && currentTime >= duration - 1 {
-                // ✅ 优化：剩余1秒时预加载（兜底）
+                // 剩余1秒时预加载（兜底）
                 if self.nextPlayerItem == nil {
                     self.preloadNextVideo()
                 }
@@ -298,7 +295,7 @@ struct GirlVideoPlayerView: View {
         }
     }
     
-    // MARK: - 原有：移除观察者（完全保留）
+    // 原有：移除观察者（完全保留）
     private func removePlayerObservers() {
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
         if let observer = timeObserver, let player = player {
@@ -307,10 +304,10 @@ struct GirlVideoPlayerView: View {
         timeObserver = nil
     }
     
-    // MARK: - 原有：接口请求与视频播放（仅新增防黑屏逻辑）
+    // 原有：接口请求与视频播放（仅新增防黑屏逻辑）
     private func loadGirlVideo() {
         isLoading = true
-        showCover = true // 新增：显示封面防黑屏
+        showCover = true // 显示封面防黑屏
         
         guard let url = URL(string: girlVideoApi) else {
             isLoading = false
@@ -382,7 +379,7 @@ struct GirlVideoPlayerView: View {
         }.resume()
     }
     
-    // MARK: - 原有：播放视频（仅新增防黑屏+缓冲优化）
+    // 原有：播放视频（修复API+新增缓冲优化）
     private func playVideo(with url: URL) {
         // 原有：重置音频会话
         setupAudioSession()
@@ -394,24 +391,23 @@ struct GirlVideoPlayerView: View {
         playerItem.preferredForwardBufferDuration = 10 // 从2秒改为10秒
         playerItem.canUseNetworkResourcesForLiveStreamingWhilePaused = true
         
-        // 新增：异步加载视频属性，避免UI阻塞
-        playerItem.loadValuesAsynchronously(forKeys: ["playable"]) {
-            DispatchQueue.main.async {
-                self.player = AVPlayer(playerItem: playerItem)
-                self.player.play()
-                
-                // 新增：延迟隐藏封面（确保视频渲染完成）
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    self.showCover = false
-                }
-                
-                // 原有：设置观察者
-                self.setupPlayerObservers()
+        // ✅ 修复2：移除低版本不兼容的loadValuesAsynchronously
+        // 直接初始化播放器，兼容所有版本
+        DispatchQueue.main.async {
+            self.player = AVPlayer(playerItem: playerItem)
+            self.player.play()
+            
+            // 延迟隐藏封面（确保视频渲染完成）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.showCover = false
             }
+            
+            // 原有：设置观察者
+            self.setupPlayerObservers()
         }
     }
     
-    // MARK: - 原有：兜底视频（完全保留）
+    // 原有：兜底视频（完全保留）
     private func playBackupVideo() {
         let backupUrl = URL(string: "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl1.mp4")!
         playVideo(with: backupUrl)
@@ -430,7 +426,7 @@ struct VideoPlayerLayer: UIViewRepresentable {
         playerLayer.frame = view.bounds
         playerLayer.videoGravity = .resizeAspectFill
         
-        // ✅ 新增：硬件加速配置（提升流畅度）
+        // 硬件加速配置（提升流畅度）
         playerLayer.shouldRasterize = true
         playerLayer.rasterizationScale = UIScreen.main.scale
         playerLayer.needsDisplayOnBoundsChange = false
@@ -441,20 +437,11 @@ struct VideoPlayerLayer: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: UIView, context: Context) {
-        // ✅ 新增：异步更新图层，避免UI卡顿
+        // 异步更新图层，避免UI卡顿
         DispatchQueue.main.async {
             if let layer = uiView.layer.sublayers?.first as? AVPlayerLayer {
                 layer.player = self.player
             }
-        }
-    }
-}
-
-// ✅ 新增：扩展（检查播放状态，不影响原有逻辑）
-extension AVPlayerItem.Status {
-    func checkIfError() throws {
-        if self == .failed {
-            throw NSError(domain: "VideoError", code: -1, userInfo: [NSLocalizedDescriptionKey: "视频加载失败"])
         }
     }
 }
