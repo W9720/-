@@ -152,28 +152,124 @@ struct VideoApp: App {
     
     var body: some Scene {
         WindowGroup {
-            TabView {
-                GirlVideoPlayerView()
-                    .tabItem {
-                        Image(systemName: "play.circle.fill")
-                        Text("视频播放")
-                    }
-                
-                DownloadedVideosView()
-                    .tabItem {
-                        Image(systemName: "arrow.down.circle.fill")
-                        Text("我的下载")
-                    }
-                
-                PlayHistoryView()
-                    .tabItem {
-                        Image(systemName: "clock.arrow.circlepath")
-                        Text("播放历史")
-                    }
-            }
-            .preferredColorScheme(.dark)
-            .environmentObject(historyManager)
+            SplashView()
+                .preferredColorScheme(.dark)
+                .environmentObject(historyManager)
         }
+    }
+}
+
+// MARK: - 欢迎界面（高端动画版）
+struct SplashView: View {
+    @State private var showMain = false
+    @State private var animateLogo = false
+    @State private var animateText = false
+    @EnvironmentObject var historyManager: PlayHistoryManager
+    
+    var body: some View {
+        ZStack {
+            // 渐变背景
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color(red: 0.1, green: 0.1, blue: 0.2),
+                    Color.black
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            VStack(spacing: 24) {
+                // 图标 / LOGO
+                Image(systemName: "play.rectangle.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 120, height: 120)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.pink, .purple, .blue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: .pink.opacity(0.5), radius: 20, x: 0, y: 5)
+                    .scaleEffect(animateLogo ? 1 : 0.3)
+                    .opacity(animateLogo ? 1 : 0)
+                
+                // 主标题
+                Text("别说反话 别冷冰冰")
+                    .font(.system(size: 38, weight: .bold))
+                    .foregroundColor(.white)
+                    .opacity(animateText ? 1 : 0)
+                    .offset(y: animateText ? 0 : 20)
+                
+                // 副标题
+                Text("By 喜爱民谣")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                    .opacity(animateText ? 1 : 0)
+                    .offset(y: animateText ? 0 : 20)
+            }
+        }
+        .statusBarHidden()
+        .onAppear {
+            // 第一段：LOGO动画
+            withAnimation(.easeOut(duration: 0.8)) {
+                animateLogo = true
+            }
+            
+            // 第二段：文字动画
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation(.easeOut(duration: 0.8)) {
+                    animateText = true
+                }
+            }
+            
+            // 第三段：退出动画 + 进入主页
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                withAnimation(.easeIn(duration: 0.4)) {
+                    animateLogo = false
+                    animateText = false
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    showMain = true
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showMain) {
+            MainTabView()
+                .environmentObject(historyManager)
+                .transition(.opacity.combined(with: .scale))
+        }
+    }
+}
+
+// MARK: - 主Tab页
+struct MainTabView: View {
+    @EnvironmentObject var historyManager: PlayHistoryManager
+    
+    var body: some View {
+        TabView {
+            GirlVideoPlayerView()
+                .tabItem {
+                    Image(systemName: "play.circle.fill")
+                    Text("视频播放")
+                }
+            
+            DownloadedVideosView()
+                .tabItem {
+                    Image(systemName: "arrow.down.circle.fill")
+                    Text("我的下载")
+                }
+            
+            PlayHistoryView()
+                .tabItem {
+                    Image(systemName: "clock.arrow.circlepath")
+                    Text("播放历史")
+                }
+        }
+        .preferredColorScheme(.dark)
+        .environmentObject(historyManager)
     }
 }
 
@@ -243,7 +339,7 @@ struct GirlVideoPlayerView: View {
                     ProgressView()
                         .tint(.white)
                         .scaleEffect(2)
-                    Text("加载小姐姐视频...")
+                    Text("加载视频...")
                         .foregroundColor(.white.opacity(0.8))
                         .font(.caption)
                         .padding(.top, 10)
@@ -288,7 +384,7 @@ struct GirlVideoPlayerView: View {
                         .foregroundColor(.white.opacity(0.7))
                         .font(.caption)
                 }
-                .padding(.bottom, 70)
+                .padding(.bottom, 100)
             }
             
             VStack {
@@ -314,7 +410,7 @@ struct GirlVideoPlayerView: View {
                             .opacity(downloadModel.isDownloading ? 0.5 : 1)
                     }
                     .padding(.trailing, 20)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 120)
                     .onTapGesture {
                         if let url = currentVideoUrl, !downloadModel.isDownloading {
                             startDownload(url: url)
@@ -331,7 +427,7 @@ struct GirlVideoPlayerView: View {
                         .padding(12)
                         .background(Color.black.opacity(0.8))
                         .cornerRadius(8)
-                        .padding(.bottom, 100)
+                        .padding(.bottom, 140)
                 }
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.3), value: showDownloadToast)
@@ -1132,20 +1228,22 @@ struct HistoryVideoPlayerView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             loadCover()
-            player = AVPlayer(url: videoUrl)
-            
-            if let historyItem = historyManager.historyItems.first(where: { $0.videoUrl == videoUrl.absoluteString }) {
-                let startTime = CMTime(seconds: historyItem.playbackPosition, preferredTimescale: 1000)
-                player.seek(to: startTime) { _ in
-                    self.player.play()
-                    self.showCover = false
+            DispatchQueue.main.async {
+                player = AVPlayer(url: videoUrl)
+                
+                if let historyItem = historyManager.historyItems.first(where: { $0.videoUrl == videoUrl.absoluteString }) {
+                    let startTime = CMTime(seconds: historyItem.playbackPosition, preferredTimescale: 1000)
+                    player.seek(to: startTime) { _ in
+                        self.player.play()
+                        self.showCover = false
+                    }
+                } else {
+                    player.play()
+                    showCover = false
                 }
-            } else {
-                player.play()
-                showCover = false
+                
+                setupObservers()
             }
-            
-            setupObservers()
         }
         .onDisappear {
             historyManager.updatePlaybackPosition(videoUrl: videoUrl.absoluteString, position: currentTime)
@@ -1280,10 +1378,12 @@ struct OfflineVideoPlayerView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             loadCover()
-            player = AVPlayer(url: videoUrl)
-            player.play()
-            showCover = false
-            setupObservers()
+            DispatchQueue.main.async {
+                player = AVPlayer(url: videoUrl)
+                player.play()
+                showCover = false
+                setupObservers()
+            }
         }
         .onDisappear {
             removeObservers()
