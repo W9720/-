@@ -14,24 +14,28 @@ struct VideoApp: App {
     }
 }
 
-// 欢迎页
+// 欢迎页（修复颜色兼容性）
 struct SplashView: View {
     @State private var showVideo = false
     
     var body: some View {
         ZStack {
-            LinearGradient(colors: [.systemPink.opacity(0.9), .systemPurple.opacity(0.9)], startPoint: .top, endPoint: .bottom)
+            // ✅ 修复：改用全版本兼容的颜色写法，替代systemPink/systemPurple
+            LinearGradient(colors: [Color(red: 1.0, green: 0.18, blue: 0.33).opacity(0.9), 
+                                   Color(red: 0.55, green: 0.0, blue: 0.55).opacity(0.9)], 
+                          startPoint: .top, 
+                          endPoint: .bottom)
                 .ignoresSafeArea()
             
             VStack(spacing: 30) {
                 Image(systemName: "sparkles.fill")
                     .font(.system(size: 60))
                     .foregroundColor(.white)
-                Text("小姐姐短视频")
+                Text("欢迎使用")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
-                Text("专属接口 | 秒速解析 | 纯小姐姐✨")
+                Text("By 喜爱民谣")
                     .foregroundColor(.white.opacity(0.8))
             }
         }
@@ -46,7 +50,7 @@ struct SplashView: View {
     }
 }
 
-// 核心播放页（修复weak self错误）
+// 核心播放页（无weak self错误）
 struct GirlVideoPlayerView: View {
     @State private var currentVideoUrl: URL? // 当前播放的视频链接
     @State private var player: AVPlayer!
@@ -111,7 +115,7 @@ struct GirlVideoPlayerView: View {
         )
     }
     
-    // 核心：请求接口并解析视频链接（修复weak self错误）
+    // 核心：请求接口并解析视频链接
     private func loadGirlVideo() {
         isLoading = true
         
@@ -130,7 +134,7 @@ struct GirlVideoPlayerView: View {
         ]
         let session = URLSession(configuration: config)
         
-        // ✅ 修复：移除weak self（View是值类型，不需要weak）
+        // 无weak self，避免值类型错误
         session.dataTask(with: url) { data, _, err in
             DispatchQueue.main.async {
                 self.isLoading = false
