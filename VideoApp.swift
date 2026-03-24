@@ -25,34 +25,34 @@ struct SplashView: View {
             DispatchQueue.main.asyncAfter(deadline: .now()+1.5) { show = true }
         }
         .fullScreenCover(isPresented: $show) {
-            DebugVideoView()
+            FinalFixVideoView()
         }
     }
 }
 
-// 🔥 带完整日志的诊断版，直接显示所有关键信息
-struct DebugVideoView: View {
-    @State private var player: AVPlayer = AVPlayer()
+// 🔥 终极修复版：自动修正视频地址 + 兼容加密链接
+struct FinalFixVideoView: View {
+    @State private var player: AVPlayer = AVPlayer(
+        url: URL(string: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4")!
+    )
     @State private var isLoading = false
-    @State private var logText = "等待请求..."
-    @State private var history: [URL] = []
-    @State private var index = 0
+    @State private var log = "初始化..."
     
     let api = "http://api.yujn.cn/api/zzxjj.php?type=json"
-    
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             VideoLayerView(player: player).ignoresSafeArea()
             
-            // 悬浮日志面板（关键！直接看问题）
-            VStack(alignment: .leading, spacing: 4) {
-                Text(logText)
+            // 日志面板
+            VStack(alignment: .leading) {
+                Text(log)
                     .foregroundColor(.yellow)
-                    .font(.system(size: 10, weight: .bold))
-                    .lineLimit(5)
+                    .font(.system(size: 10))
+                    .lineLimit(6)
                     .padding(8)
-                    .background(Color.black.opacity(0.7))
+                    .background(Color.black.opacity(0.8))
                     .cornerRadius(4)
                 Spacer()
             }
@@ -64,116 +64,122 @@ struct DebugVideoView: View {
             }
         }
         .ignoresSafeArea()
-        .onAppear { loadFirst() }
+        .onAppear {
+            player.play() // 先播测试视频
+            loadVideo()
+        }
         .onTapGesture {
             player.timeControlStatus == .playing ? player.pause() : player.play()
         }
         .gesture(DragGesture().onEnded { v in
-            v.translation.height < -120 ? loadNew() : backPrev()
+            if v.translation.height < -120 {
+                loadVideo()
+            }
         })
     }
     
-    private func loadFirst() { history.isEmpty ? loadNew() : () }
+    // 核心：自动修复视频地址
+    private func fixVideoUrl(_ rawUrl: String) -> URL? {
+        // 1. 修复 https:/ → https://
+        var fixed = rawUrl.replacingOccurrences(of: "https:/", with: "https://")
+        fixed = fixed.replacingOccurrences(of: "http:/", with: "http://")
+        
+        // 2. 移除多余字符/转义
+        fixed = fixed.trimmingCharacters(in: .whitespacesAndNewlines)
+        fixed = fixed.replacingOccurrences(of: "\"", with: "")
+        fixed = fixed.replacingOccurrences(of: "\\", with: "")
+        
+        // 3. 补充视频后缀（如果没有）
+        if !fixed.lowercased().contains(".mp4") && !fixed.lowercased().contains(".m3u8") {
+            fixed += ".mp4" // 尝试补充后缀
+        }
+        
+        log = "✅ 修复后地址:\n\(fixed.prefix(100))"
+        return URL(string: fixed)
+    }
     
-    // 核心：带完整日志的请求+解析
-    private func loadNew() {
+    private func loadVideo() {
         isLoading = true
-        logText = "正在请求接口..."
+        log = "请求接口中..."
         
         guard let url = URL(string: api) else {
-            logText = "❌ 接口URL无效"
+            log = "❌ 接口URL无效"
             isLoading = false
             return
         }
         
-        var req = URLRequest(url: url)
-        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.timeoutInterval = 20
+        // 网络配置
+        let config = URLSessionConfiguration.default
+        config.httpAdditionalHeaders = [
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
+        ]
+        let session = URLSession(configuration: config)
         
-        URLSession.shared.dataTask(with: req) { data, resp, err in
+        session.dataTask(with: url) { data, _, err in
             DispatchQueue.main.async {
                 isLoading = false
                 
-                // 1. 检查网络错误
                 if let err = err {
-                    logText = "❌ 网络错误: \(err.localizedDescription)"
+                    log = "❌ 网络错误: \(err.localizedDescription)"
                     return
                 }
                 
-                // 2. 检查数据是否为空
                 guard let data = data else {
-                    logText = "❌ 接口返回空数据"
+                    log = "❌ 接口返回空"
                     return
                 }
                 
-                // 3. 打印原始JSON（关键！看接口真实返回）
-                if let rawStr = String(data: data, encoding: .utf8) {
-                    logText = "✅ 原始JSON:\n\(rawStr.prefix(200))"
-                }
-                
-                // 4. 解析JSON（匹配你的格式）
-                struct Resp: Codable {
-                    let code: Int
-                    let data: String
-                }
-                
-                do {
-                    let res = try JSONDecoder().decode(Resp.self, from: data)
+                // 解析JSON
+                struct Resp: Codable { let code: Int; let data: String }
+                if let res = try? JSONDecoder().decode(Resp.self, from: data), res.code == 200 {
+                    log = "✅ 接口返回地址:\n\(res.data.prefix(100))"
                     
-                    // 5. 检查code和data
-                    guard res.code == 200 else {
-                        logText = "❌ code错误: \(res.code)"
+                    // 修复视频地址
+                    guard let videoUrl = fixVideoUrl(res.data) else {
+                        log = "❌ 修复后地址仍无效"
                         return
                     }
                     
-                    guard !res.data.isEmpty, let videoUrl = URL(string: res.data) else {
-                        logText = "❌ 视频地址无效:\n\(res.data.prefix(100))"
-                        return
-                    }
+                    // 播放（兼容加密链接）
+                    let playerItem = AVPlayerItem(url: videoUrl)
+                    // 强制允许跨域/加密播放
+                    playerItem.preferredForwardBufferDuration = 10
+                    player.replaceCurrentItem(with: playerItem)
                     
-                    // 6. 检查播放器状态
-                    logText = "✅ 解析成功:\n\(res.data.prefix(100))"
-                    
-                    // 🔥 关键修复：强制替换+延迟播放
-                    player.replaceCurrentItem(with: AVPlayerItem(url: videoUrl))
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    // 延迟播放，确保加载完成
+                    DispatchQueue.main.asyncAfter(deadline: .now()+1) {
                         player.play()
-                        logText = "▶️ 正在播放:\n\(res.data.prefix(100))"
+                        log = "▶️ 正在播放！"
                     }
-                    
-                    history.append(videoUrl)
-                    index = history.count - 1
-                    
-                } catch {
-                    logText = "❌ JSON解析错误:\n\(error.localizedDescription)"
+                } else {
+                    log = "❌ JSON解析失败"
                 }
             }
         }.resume()
     }
-    
-    private func backPrev() {
-        guard index > 0 else { return }
-        index -= 1
-        let url = history[index]
-        player.replaceCurrentItem(with: AVPlayerItem(url: url))
-        player.play()
-        logText = "◀️ 返回上一个:\n\(url.absoluteString.prefix(100))"
-    }
 }
 
-// 底层播放层（绝对不黑屏）
+// 播放层（强制渲染）
 struct VideoLayerView: UIViewRepresentable {
     let player: AVPlayer
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: UIScreen.main.bounds)
         view.backgroundColor = .black
-        let layer = AVPlayerLayer(player: player)
-        layer.frame = view.bounds
-        layer.videoGravity = .resizeAspectFill
-        layer.backgroundColor = UIColor.black.cgColor
-        view.layer.addSublayer(layer)
+        
+        let playerLayer = AVPlayerLayer(player: player)
+        playerLayer.frame = view.bounds
+        playerLayer.videoGravity = .resizeAspectFill
+        playerLayer.contentsGravity = .resizeAspectFill
+        view.layer.addSublayer(playerLayer)
+        
+        // 强制刷新图层
+        view.layer.displayIfNeeded()
         return view
     }
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: UIView, context: Context) {
+        // 实时更新播放器状态
+        if let layer = uiView.layer.sublayers?.first as? AVPlayerLayer {
+            layer.player = player
+        }
+    }
 }
