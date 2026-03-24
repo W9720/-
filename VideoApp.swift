@@ -673,9 +673,9 @@ struct GirlVideoPlayerView: View {
             }
         }
         
-        // 增强：更精准的进度更新（每秒30次）
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { [weak self] time in
-            guard let self = self, !self.isDraggingProgress, let currentItem = player.currentItem else { return }
+        // 增强：更精准的进度更新（每秒30次）- 修复 weak self 问题
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { time in
+            guard !self.isDraggingProgress, let currentItem = player.currentItem else { return }
             
             let duration = CMTimeGetSeconds(currentItem.duration)
             let currentTime = CMTimeGetSeconds(time)
@@ -1107,7 +1107,7 @@ struct PlayHistoryView: View {
     }
 }
 
-// MARK: - 历史视频播放页
+// MARK: - 历史视频播放页（修复 weak self 问题）
 struct HistoryVideoPlayerView: View {
     let videoUrl: URL
     @State private var player: AVPlayer!
@@ -1236,9 +1236,9 @@ struct HistoryVideoPlayerView: View {
                 self.durationObserver = observer
                 currentItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
                 
-                // 监听播放进度
-                timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { [weak self] time in
-                    guard let self = self, !self.isDraggingProgress, let currentItem = player.currentItem else { return }
+                // 监听播放进度 - 修复 weak self 问题
+                timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { time in
+                    guard !self.isDraggingProgress, let currentItem = player.currentItem else { return }
                     
                     let duration = CMTimeGetSeconds(currentItem.duration)
                     let currentTime = CMTimeGetSeconds(time)
@@ -1308,7 +1308,7 @@ struct HistoryVideoPlayerView: View {
     }
 }
 
-// MARK: - 离线视频播放页
+// MARK: - 离线视频播放页（修复 weak self 问题）
 struct OfflineVideoPlayerView: View {
     let videoUrl: URL
     @State private var player: AVPlayer!
@@ -1414,7 +1414,7 @@ struct OfflineVideoPlayerView: View {
                 print("音频激活失败: \(error)")
             }
             
-            // 监听时长和进度
+            // 监听时长和进度 - 修复 weak self 问题
             if let currentItem = player.currentItem {
                 let observer = DurationObserver { duration in
                     self.totalDuration = duration
@@ -1422,8 +1422,8 @@ struct OfflineVideoPlayerView: View {
                 self.durationObserver = observer
                 currentItem.addObserver(observer, forKeyPath: "duration", options: [.new, .initial], context: nil)
                 
-                timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { [weak self] time in
-                    guard let self = self, !self.isDraggingProgress, let currentItem = player.currentItem else { return }
+                timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { time in
+                    guard !self.isDraggingProgress, let currentItem = player.currentItem else { return }
                     
                     let duration = CMTimeGetSeconds(currentItem.duration)
                     let currentTime = CMTimeGetSeconds(time)
