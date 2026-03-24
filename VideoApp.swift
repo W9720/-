@@ -383,7 +383,7 @@ struct GirlVideoPlayerView: View {
             VStack {
                 Spacer()
                 HStack(spacing: 20) {
-                    
+                   
                     Text("富则入道而润其根 穷则观屏而勤其手")
                         .foregroundColor(.white.opacity(0.7))
                         .font(.caption)
