@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>CFBundleDisplayName</key>
@@ -12,13 +11,30 @@
     <string>1.0</string>
     <key>MinimumOSVersion</key>
     <string>15.0</string>
+    
+    <!-- 🔥 关键：彻底放开网络限制 -->
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>
         <true/>
         <key>NSAllowsArbitraryLoadsForMedia</key>
         <true/>
+        <key>NSAllowsArbitraryLoadsInWebContent</key>
+        <true/>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>api.yujn.cn</key>
+            <dict>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+                <key>NSExceptionRequiresForwardSecrecy</key>
+                <false/>
+            </dict>
+        </dict>
     </dict>
+    
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
 </dict>
