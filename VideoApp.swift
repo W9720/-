@@ -11,175 +11,169 @@ struct VideoApp: App {
     }
 }
 
-// 欢迎页 By 喜爱民谣
 struct SplashView: View {
-    @State private var showVideo = false
-    
+    @State private var show = false
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VStack(spacing: 20) {
-                Text("欢迎使用").font(.title).foregroundColor(.white)
-                Text("By 喜爱民谣").foregroundColor(.gray)
+            VStack(spacing:20) {
+                Text("欢迎使用").foregroundColor(.white).font(.title)
+                Text("By 喜爱民谣").foregroundColor(.gray).font(.title2)
             }
         }
         .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                showVideo = true
-            }
+            DispatchQueue.main.asyncAfter(deadline: .now()+1.5) { show = true }
         }
-        .fullScreenCover(isPresented: $showVideo) {
-            VideoPlayerView()
+        .fullScreenCover(isPresented: $show) {
+            DebugVideoView()
         }
     }
 }
 
-// ✅ 适配你的 JSON 接口（精准解析 data 字段）
-struct VideoPlayerView: View {
+// 🔥 带完整日志的诊断版，直接显示所有关键信息
+struct DebugVideoView: View {
     @State private var player: AVPlayer = AVPlayer()
     @State private var isLoading = false
-    @State private var videoHistory: [URL] = []
-    @State private var currentIndex = 0
+    @State private var logText = "等待请求..."
+    @State private var history: [URL] = []
+    @State private var index = 0
     
-    // 你的 JSON 接口地址
     let api = "http://api.yujn.cn/api/zzxjj.php?type=json"
-
+    
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             VideoLayerView(player: player).ignoresSafeArea()
             
-            // 加载动画
+            // 悬浮日志面板（关键！直接看问题）
+            VStack(alignment: .leading, spacing: 4) {
+                Text(logText)
+                    .foregroundColor(.yellow)
+                    .font(.system(size: 10, weight: .bold))
+                    .lineLimit(5)
+                    .padding(8)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(4)
+                Spacer()
+            }
+            .padding(.top, 20)
+            .padding(.leading, 8)
+            
             if isLoading {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(2.0)
+                ProgressView().tint(.white).scaleEffect(2)
             }
         }
         .ignoresSafeArea()
-        .preferredColorScheme(.dark)
-        .onAppear(perform: loadFirstVideo)
-        // 点击暂停/播放
+        .onAppear { loadFirst() }
         .onTapGesture {
-            guard let currentItem = player.currentItem else { return }
-            if player.timeControlStatus == .playing {
-                player.pause()
-            } else {
-                player.play()
-            }
+            player.timeControlStatus == .playing ? player.pause() : player.play()
         }
-        // 下滑加载新视频、上滑返回上一个
-        .gesture(DragGesture().onEnded { value in
-            if value.translation.height < -120 { // 下滑
-                loadNewVideo()
-            }
-            if value.translation.height > 120 { // 上滑
-                backToPreviousVideo()
-            }
+        .gesture(DragGesture().onEnded { v in
+            v.translation.height < -120 ? loadNew() : backPrev()
         })
     }
     
-    // 首次加载视频
-    private func loadFirstVideo() {
-        if videoHistory.isEmpty {
-            loadNewVideo()
-        }
-    }
+    private func loadFirst() { history.isEmpty ? loadNew() : () }
     
-    // ✅ 核心：解析你的 JSON 接口（data 字段是视频地址）
-    private func loadNewVideo() {
+    // 核心：带完整日志的请求+解析
+    private func loadNew() {
         isLoading = true
+        logText = "正在请求接口..."
         
-        // 校验接口地址
         guard let url = URL(string: api) else {
+            logText = "❌ 接口URL无效"
             isLoading = false
             return
         }
         
-        // 构建请求（伪装浏览器，避免被拦截）
-        var request = URLRequest(url: url)
-        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = 20
+        var req = URLRequest(url: url)
+        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.timeoutInterval = 20
         
-        // 发起网络请求并解析 JSON
-        URLSession.shared.dataTask(with: request) { data, _, error in
+        URLSession.shared.dataTask(with: req) { data, resp, err in
             DispatchQueue.main.async {
                 isLoading = false
                 
-                // 处理网络错误
-                if let error = error {
-                    print("网络请求错误：\(error.localizedDescription)")
+                // 1. 检查网络错误
+                if let err = err {
+                    logText = "❌ 网络错误: \(err.localizedDescription)"
                     return
                 }
                 
-                // 校验返回数据
+                // 2. 检查数据是否为空
                 guard let data = data else {
-                    print("接口返回空数据")
+                    logText = "❌ 接口返回空数据"
                     return
                 }
                 
-                // 解析 JSON（匹配你的返回格式）
+                // 3. 打印原始JSON（关键！看接口真实返回）
+                if let rawStr = String(data: data, encoding: .utf8) {
+                    logText = "✅ 原始JSON:\n\(rawStr.prefix(200))"
+                }
+                
+                // 4. 解析JSON（匹配你的格式）
+                struct Resp: Codable {
+                    let code: Int
+                    let data: String
+                }
+                
                 do {
-                    struct VideoResponse: Codable {
-                        let code: Int
-                        let video_count: String?
-                        let title: String?
-                        let data: String? // 视频地址字段
-                        let tips: String?
-                    }
+                    let res = try JSONDecoder().decode(Resp.self, from: data)
                     
-                    let response = try JSONDecoder().decode(VideoResponse.self, from: data)
-                    
-                    // 校验视频地址
-                    guard let videoUrlStr = response.data, 
-                          !videoUrlStr.isEmpty,
-                          let videoUrl = URL(string: videoUrlStr) else {
-                        print("视频地址解析失败")
+                    // 5. 检查code和data
+                    guard res.code == 200 else {
+                        logText = "❌ code错误: \(res.code)"
                         return
                     }
                     
-                    // 播放视频
-                    player.replaceCurrentItem(with: AVPlayerItem(url: videoUrl))
-                    player.play()
+                    guard !res.data.isEmpty, let videoUrl = URL(string: res.data) else {
+                        logText = "❌ 视频地址无效:\n\(res.data.prefix(100))"
+                        return
+                    }
                     
-                    // 记录播放历史
-                    videoHistory.append(videoUrl)
-                    currentIndex = videoHistory.count - 1
+                    // 6. 检查播放器状态
+                    logText = "✅ 解析成功:\n\(res.data.prefix(100))"
+                    
+                    // 🔥 关键修复：强制替换+延迟播放
+                    player.replaceCurrentItem(with: AVPlayerItem(url: videoUrl))
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        player.play()
+                        logText = "▶️ 正在播放:\n\(res.data.prefix(100))"
+                    }
+                    
+                    history.append(videoUrl)
+                    index = history.count - 1
                     
                 } catch {
-                    print("JSON 解析错误：\(error.localizedDescription)")
+                    logText = "❌ JSON解析错误:\n\(error.localizedDescription)"
                 }
             }
         }.resume()
     }
     
-    // 返回上一个视频
-    private func backToPreviousVideo() {
-        guard currentIndex > 0 else { return }
-        currentIndex -= 1
-        let prevUrl = videoHistory[currentIndex]
-        player.replaceCurrentItem(with: AVPlayerItem(url: prevUrl))
+    private func backPrev() {
+        guard index > 0 else { return }
+        index -= 1
+        let url = history[index]
+        player.replaceCurrentItem(with: AVPlayerItem(url: url))
         player.play()
+        logText = "◀️ 返回上一个:\n\(url.absoluteString.prefix(100))"
     }
 }
 
-// 底层播放层（确保不黑屏、全屏渲染）
+// 底层播放层（绝对不黑屏）
 struct VideoLayerView: UIViewRepresentable {
     let player: AVPlayer
-    
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: UIScreen.main.bounds)
         view.backgroundColor = .black
-        
-        // 配置 AVPlayerLayer
-        let playerLayer = AVPlayerLayer(player: player)
-        playerLayer.frame = view.bounds
-        playerLayer.videoGravity = .resizeAspectFill // 全屏适配
-        view.layer.addSublayer(playerLayer)
-        
+        let layer = AVPlayerLayer(player: player)
+        layer.frame = view.bounds
+        layer.videoGravity = .resizeAspectFill
+        layer.backgroundColor = UIColor.black.cgColor
+        view.layer.addSublayer(layer)
         return view
     }
-    
     func updateUIView(_ uiView: UIView, context: Context) {}
 }
