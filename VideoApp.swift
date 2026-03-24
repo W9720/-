@@ -15,10 +15,13 @@ struct SplashView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            Text("By 喜爱民谣").foregroundColor(.white)
+            VStack(spacing:20){
+                Text("欢迎使用").foregroundColor(.white)
+                Text("By 喜爱民谣").foregroundColor(.gray)
+            }
         }
         .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now()+1) { show = true }
+            DispatchQueue.main.asyncAfter(deadline: .now()+1.5) { show = true }
         }
         .fullScreenCover(isPresented: $show) {
             VideoPlayerView()
@@ -32,10 +35,6 @@ struct VideoPlayerView: View {
     @State private var videoStack: [URL] = []
     @State private var currentIndex = 0
     
-    // 调试信息（直接显示在屏幕上）
-    @State private var debugRaw = ""
-    @State private var debugClean = ""
-    
     let api = "https://api.yujn.cn/api/zzxjj.php?type=video"
     
     var body: some View {
@@ -48,17 +47,6 @@ struct VideoPlayerView: View {
                     .ignoresSafeArea()
             }
             
-            // 调试信息悬浮层
-            VStack {
-                Text("原始返回: \(debugRaw)")
-                    .foregroundColor(.red)
-                    .font(.system(size: 10))
-                Text("清理后: \(debugClean)")
-                    .foregroundColor(.green)
-                    .font(.system(size: 10))
-                Spacer()
-            }
-            
             if isLoading {
                 ProgressView().tint(.white).scaleEffect(1.5)
             }
@@ -66,18 +54,21 @@ struct VideoPlayerView: View {
         .ignoresSafeArea()
         .onAppear(perform: initialLoad)
         .onTapGesture {
-            player?.timeControlStatus == .playing ? player?.pause() : player?.play()
+            guard let p = player else {return}
+            p.timeControlStatus == .playing ? p.pause() : p.play()
         }
         .gesture(DragGesture().onEnded { v in
             if v.translation.height < -100 { loadNewVideo() }
             if v.translation.height > 100 { backPrevVideo() }
         })
+        .preferredColorScheme(.dark)
     }
     
     private func initialLoad() {
         if videoStack.isEmpty { loadNewVideo() }
     }
     
+    // ✅ 核心修复：完全伪装浏览器，绕过服务器拦截
     private func loadNewVideo() {
         isLoading = true
         guard let url = URL(string: api) else {
@@ -85,24 +76,25 @@ struct VideoPlayerView: View {
             return
         }
         
-        var req = URLRequest(url: url)
-        req.setValue("Mozilla/5.5", forHTTPHeaderField: "User-Agent")
+        var request = URLRequest(url: url)
+        // 🔥 伪装成电脑 Chrome 浏览器（服务器必放行）
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.setValue("https://api.yujn.cn/", forHTTPHeaderField: "Referer")
         
-        URLSession.shared.dataTask(with: req) { data, resp, err in
+        URLSession.shared.dataTask(with: request) { data, resp, err in
             DispatchQueue.main.async {
-                guard let data = data, let str = String(data: data, encoding: .utf8) else {
-                    debugRaw = "无数据"
+                guard let data = data,
+                      let str = String(data: data, encoding: .utf8),
+                      !str.isEmpty else {
                     isLoading = false
                     return
                 }
                 
-                // 显示真实返回
-                debugRaw = String(str.prefix(150))
-                
                 let clean = str.trimmingCharacters(in: .whitespacesAndNewlines)
-                debugClean = String(clean.prefix(150))
-                
-                guard let videoUrl = URL(string: clean), clean.hasPrefix("http") else {
+                guard let videoUrl = URL(string: clean), clean.starts(with: "http") else {
                     isLoading = false
                     return
                 }
@@ -110,7 +102,7 @@ struct VideoPlayerView: View {
                 player = AVPlayer(url: videoUrl)
                 player?.play()
                 videoStack.append(videoUrl)
-                currentIndex = videoStack.count-1
+                currentIndex = videoStack.count - 1
                 isLoading = false
             }
         }.resume()
