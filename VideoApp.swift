@@ -1,12 +1,23 @@
 import SwiftUI
 import AVKit
 import UIKit
+import AVFoundation // ✅ 新增：音频会话依赖
 
 // 你的小姐姐专属接口（稳定可访问）
 let girlVideoApi = "https://tucdn.wpon.cn/api-girl/index.php?wpon=json"
 
 @main
 struct VideoApp: App {
+    // ✅ 修复1：App启动时强制开启音频会话，绕过系统静音
+    init() {
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("音频会话初始化失败: \(error)")
+        }
+    }
+    
     var body: some Scene {
         WindowGroup {
             SplashView()
@@ -14,13 +25,12 @@ struct VideoApp: App {
     }
 }
 
-// 欢迎页（修复颜色兼容性）
+// 欢迎页
 struct SplashView: View {
     @State private var showVideo = false
     
     var body: some View {
         ZStack {
-            // ✅ 修复：改用全版本兼容的颜色写法，替代systemPink/systemPurple
             LinearGradient(colors: [Color(red: 1.0, green: 0.18, blue: 0.33).opacity(0.9), 
                                    Color(red: 0.55, green: 0.0, blue: 0.55).opacity(0.9)], 
                           startPoint: .top, 
@@ -50,23 +60,23 @@ struct SplashView: View {
     }
 }
 
-// 核心播放页（无weak self错误）
+// 核心播放页（双问题修复：静音有声+自动连播）
 struct GirlVideoPlayerView: View {
-    @State private var currentVideoUrl: URL? // 当前播放的视频链接
+    @State private var currentVideoUrl: URL?
     @State private var player: AVPlayer!
     @State private var isLoading = false
+    // ✅ 新增：监听播放器状态的观察者
+    @State private var timeObserver: Any?
     
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            // 视频播放层
             if let player = player {
                 VideoPlayerLayer(player: player)
                     .ignoresSafeArea()
             }
             
-            // 加载提示
             if isLoading {
                 VStack {
                     ProgressView()
@@ -79,7 +89,6 @@ struct GirlVideoPlayerView: View {
                 }
             }
             
-            // 底部操作指引
             VStack {
                 Spacer()
                 HStack(spacing: 20) {
@@ -97,34 +106,82 @@ struct GirlVideoPlayerView: View {
             // 初始化加载第一个视频
             loadGirlVideo()
         }
-        // 点击暂停/播放
+        .onDisappear {
+            // ✅ 页面消失时移除观察者，避免内存泄漏
+            removePlayerObservers()
+        }
         .onTapGesture {
             if let player = player {
                 player.timeControlStatus == .playing ? player.pause() : player.play()
             }
         }
-        // 下滑刷新下一个视频
         .gesture(
             DragGesture()
                 .onEnded { gesture in
-                    if gesture.translation.height < -100 { // 下滑触发
-                        loadGirlVideo() // 重新请求接口获取新视频
+                    if gesture.translation.height < -100 {
+                        loadGirlVideo()
                     }
                 }
         )
     }
     
-    // 核心：请求接口并解析视频链接
+    // MARK: - 音频会话（修复静音无声）
+    private func setupAudioSession() {
+        do {
+            // ✅ 强制设置播放类别，绕过系统静音
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: .mixWithOthers)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("音频会话设置失败: \(error)")
+        }
+    }
+    
+    // MARK: - 播放器观察者（修复自动连播）
+    private func setupPlayerObservers() {
+        guard let player = player else { return }
+        
+        // ✅ 监听视频播放结束事件
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player.currentItem,
+            queue: .main
+        ) { _ in
+            // 视频播完，自动请求下一个视频
+            self.loadGirlVideo()
+        }
+        
+        // ✅ 监听播放进度，兜底检测
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1, preferredTimescale: 1), queue: .main) { time in
+            guard let currentItem = player.currentItem else { return }
+            let duration = CMTimeGetSeconds(currentItem.duration)
+            let currentTime = CMTimeGetSeconds(time)
+            
+            // 视频即将结束（剩余1秒）时，预加载下一个
+            if duration > 0 && currentTime >= duration - 1 {
+                self.loadGirlVideo()
+            }
+        }
+    }
+    
+    // ✅ 移除观察者
+    private func removePlayerObservers() {
+        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
+        if let observer = timeObserver, let player = player {
+            player.removeTimeObserver(observer)
+        }
+        timeObserver = nil
+    }
+    
+    // MARK: - 接口请求与视频播放
     private func loadGirlVideo() {
         isLoading = true
         
         guard let url = URL(string: girlVideoApi) else {
             isLoading = false
-            playBackupVideo() // 接口异常时播放兜底视频
+            playBackupVideo()
             return
         }
         
-        // 极速请求配置
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 6
         config.httpAdditionalHeaders = [
@@ -133,14 +190,12 @@ struct GirlVideoPlayerView: View {
         ]
         let session = URLSession(configuration: config)
         
-        // 无weak self，避免值类型错误
         session.dataTask(with: url) { data, _, err in
             DispatchQueue.main.async {
                 self.isLoading = false
                 
-                // 异常处理
                 if let err = err {
-                    print("接口请求错误：\(err.localizedDescription)")
+                    print("接口请求错误: \(err.localizedDescription)")
                     self.playBackupVideo()
                     return
                 }
@@ -150,9 +205,7 @@ struct GirlVideoPlayerView: View {
                     return
                 }
                 
-                // 解析接口返回的JSON
                 do {
-                    // 定义接口返回结构
                     struct VideoResponse: Codable {
                         let error: Int
                         let result: Int
@@ -161,19 +214,15 @@ struct GirlVideoPlayerView: View {
                     
                     let response = try JSONDecoder().decode(VideoResponse.self, from: data)
                     
-                    // 验证接口返回正常
                     if response.error == 0 && response.result == 200 {
-                        // 清理视频链接的转义符（关键！）
                         var cleanUrl = response.mp4
-                            .replacingOccurrences(of: "\\/", with: "/") // 替换转义的斜杠
+                            .replacingOccurrences(of: "\\/", with: "/")
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                         
-                        // 补全HTTPS前缀（如果链接没有的话）
                         if !cleanUrl.hasPrefix("http") {
                             cleanUrl = "https:\(cleanUrl)"
                         }
                         
-                        // 验证链接有效性并播放
                         if let videoUrl = URL(string: cleanUrl) {
                             self.currentVideoUrl = videoUrl
                             self.playVideo(with: videoUrl)
@@ -184,31 +233,38 @@ struct GirlVideoPlayerView: View {
                         self.playBackupVideo()
                     }
                 } catch {
-                    print("JSON解析错误：\(error)")
+                    print("JSON解析错误: \(error)")
                     self.playBackupVideo()
                 }
             }
         }.resume()
     }
     
-    // 播放视频（秒级解析）
     private func playVideo(with url: URL) {
+        // ✅ 每次播放前重置音频会话，确保静音有声
+        setupAudioSession()
+        
+        // 移除旧观察者
+        removePlayerObservers()
+        
+        // 创建新播放项
         let playerItem = AVPlayerItem(url: url)
-        // 预加载配置，秒播无延迟
         playerItem.preferredForwardBufferDuration = 2
+        
         player = AVPlayer(playerItem: playerItem)
-        player.play() // 立即播放
+        player.play()
+        
+        // ✅ 为新播放项添加观察者，实现自动连播
+        setupPlayerObservers()
     }
     
-    // 兜底视频（接口异常时避免黑屏）
     private func playBackupVideo() {
-        // 内置稳定的小姐姐视频直链
         let backupUrl = URL(string: "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl1.mp4")!
         playVideo(with: backupUrl)
     }
 }
 
-// 原生播放层（零黑屏）
+// 原生播放层
 struct VideoPlayerLayer: UIViewRepresentable {
     let player: AVPlayer
     
@@ -218,10 +274,9 @@ struct VideoPlayerLayer: UIViewRepresentable {
         
         let playerLayer = AVPlayerLayer(player: player)
         playerLayer.frame = view.bounds
-        playerLayer.videoGravity = .resizeAspectFill // 全屏适配
+        playerLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(playerLayer)
         
-        // 强制刷新图层，解决渲染延迟
         view.layer.displayIfNeeded()
         return view
     }
