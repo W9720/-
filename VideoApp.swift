@@ -47,7 +47,7 @@ struct PlayHistoryItem: Codable, Identifiable {
     var playbackPosition: Double = 0.0
     
     enum CodingKeys: String, CodingKey {
-        case videoUrl, playTime, videoName, playbackPosition
+        case id, videoUrl, playTime, videoName, playbackPosition
     }
     
     var fileName: String {
@@ -177,13 +177,6 @@ struct VideoApp: App {
     }
 }
 
-// MARK: - 欢迎页（废弃，直接进入播放Tab）
-struct SplashView: View {
-    var body: some View {
-        EmptyView()
-    }
-}
-
 // MARK: - 下载进度模型
 class DownloadTaskModel: ObservableObject {
     @Published var progress: Float = 0.0
@@ -216,7 +209,7 @@ struct GirlVideoPlayerView: View {
     @State private var showDownloadToast = false
     
     @EnvironmentObject private var historyManager: PlayHistoryManager
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     
     @State private var currentTime: Double = 0.0
     @State private var totalDuration: Double = 0.0
@@ -886,8 +879,10 @@ struct DownloadedVideosView: View {
         .onReceive(NotificationCenter.default.publisher(for: .downloadCompleted)) { _ in
             loadDownloadedVideos()
         }
-        .fullScreenCover(item: $selectedVideoUrl) { url in
-            OfflineVideoPlayerView(videoUrl: url)
+        .fullScreenCover(isPresented: $showPlayer) {
+            if let url = selectedVideoUrl {
+                OfflineVideoPlayerView(videoUrl: url)
+            }
         }
     }
     
@@ -1037,8 +1032,10 @@ struct PlayHistoryView: View {
             }
             .disabled(historyManager.historyItems.isEmpty)
         }
-        .fullScreenCover(item: $selectedVideoUrl) { urlString in
-            HistoryVideoPlayerView(videoUrl: URL(string: urlString)!)
+        .fullScreenCover(isPresented: $showPlayer) {
+            if let urlString = selectedVideoUrl, let url = URL(string: urlString) {
+                HistoryVideoPlayerView(videoUrl: url)
+            }
         }
     }
 }
@@ -1178,7 +1175,7 @@ struct HistoryVideoPlayerView: View {
         durationObserver = observer
         player.currentItem?.addObserver(observer, forKeyPath: "duration", options: .new, context: nil)
         
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, 1000), queue: .main) { t in
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { t in
             currentTime = CMTimeGetSeconds(t)
             if totalDuration > 0 {
                 progress = currentTime / totalDuration
@@ -1194,7 +1191,7 @@ struct HistoryVideoPlayerView: View {
     }
 }
 
-// MARK: - 离线视频播放页（修复可播放）
+// MARK: - 离线视频播放页
 struct OfflineVideoPlayerView: View {
     let videoUrl: URL
     @State private var player: AVPlayer!
@@ -1315,7 +1312,7 @@ struct OfflineVideoPlayerView: View {
         durationObserver = observer
         player.currentItem?.addObserver(observer, forKeyPath: "duration", options: .new, context: nil)
         
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, 1000), queue: .main) { t in
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTimeMakeWithSeconds(1/30, preferredTimescale: 1000), queue: .main) { t in
             currentTime = CMTimeGetSeconds(t)
             if totalDuration > 0 {
                 progress = currentTime / totalDuration
