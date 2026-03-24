@@ -25,161 +25,191 @@ struct SplashView: View {
             DispatchQueue.main.asyncAfter(deadline: .now()+1.5) { show = true }
         }
         .fullScreenCover(isPresented: $show) {
-            FinalFixVideoView()
+            // 使用UIKit封装的播放器（强制渲染）
+            UIKitVideoPlayerView()
         }
     }
 }
 
-// 🔥 终极修复版：自动修正视频地址 + 兼容加密链接
-struct FinalFixVideoView: View {
-    @State private var player: AVPlayer = AVPlayer(
-        url: URL(string: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4")!
-    )
-    @State private var isLoading = false
-    @State private var log = "初始化..."
-    
-    let api = "http://api.yujn.cn/api/zzxjj.php?type=json"
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            VideoLayerView(player: player).ignoresSafeArea()
-            
-            // 日志面板
-            VStack(alignment: .leading) {
-                Text(log)
-                    .foregroundColor(.yellow)
-                    .font(.system(size: 10))
-                    .lineLimit(6)
-                    .padding(8)
-                    .background(Color.black.opacity(0.8))
-                    .cornerRadius(4)
-                Spacer()
-            }
-            .padding(.top, 20)
-            .padding(.leading, 8)
-            
-            if isLoading {
-                ProgressView().tint(.white).scaleEffect(2)
-            }
-        }
-        .ignoresSafeArea()
-        .onAppear {
-            player.play() // 先播测试视频
-            loadVideo()
-        }
-        .onTapGesture {
-            player.timeControlStatus == .playing ? player.pause() : player.play()
-        }
-        .gesture(DragGesture().onEnded { v in
-            if v.translation.height < -120 {
-                loadVideo()
-            }
-        })
+// 🔥 核心修复：用UIKit原生播放器替代SwiftUI图层（强制渲染）
+struct UIKitVideoPlayerView: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> VideoPlayerVC {
+        let vc = VideoPlayerVC()
+        vc.apiUrl = "http://api.yujn.cn/api/zzxjj.php?type=json"
+        return vc
     }
     
-    // 核心：自动修复视频地址
-    private func fixVideoUrl(_ rawUrl: String) -> URL? {
-        // 1. 修复 https:/ → https://
-        var fixed = rawUrl.replacingOccurrences(of: "https:/", with: "https://")
-        fixed = fixed.replacingOccurrences(of: "http:/", with: "http://")
+    func updateUIViewController(_ uiViewController: VideoPlayerVC, context: Context) {}
+}
+
+// UIKit播放器控制器（100%渲染，无黑屏）
+class VideoPlayerVC: UIViewController {
+    var apiUrl: String!
+    var player: AVPlayer!
+    var playerLayer: AVPlayerLayer!
+    var playerItem: AVPlayerItem!
+    var logLabel: UILabel!
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
         
-        // 2. 移除多余字符/转义
+        // 1. 初始化日志标签
+        logLabel = UILabel()
+        logLabel.frame = CGRect(x: 10, y: 40, width: view.bounds.width - 20, height: 100)
+        logLabel.textColor = .yellow
+        logLabel.font = UIFont.systemFont(ofSize: 11)
+        logLabel.numberOfLines = 6
+        logLabel.backgroundColor = .black.withAlphaComponent(0.8)
+        logLabel.layer.cornerRadius = 4
+        logLabel.clipsToBounds = true
+        view.addSubview(logLabel)
+        updateLog("初始化播放器...")
+        
+        // 2. 初始化测试视频（确保播放器正常）
+        let testUrl = URL(string: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4")!
+        player = AVPlayer(url: testUrl)
+        playerLayer = AVPlayerLayer(player: player)
+        playerLayer.frame = view.bounds
+        playerLayer.videoGravity = .resizeAspectFill
+        playerLayer.backgroundColor = UIColor.black.cgColor
+        view.layer.addSublayer(playerLayer)
+        
+        // 3. 播放测试视频 + 加载接口视频
+        player.play()
+        updateLog("▶️ 测试视频播放中，加载接口...")
+        loadApiVideo()
+        
+        // 4. 添加点击暂停/播放
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapAction))
+        view.addGestureRecognizer(tap)
+        
+        // 5. 添加下滑刷新
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(panAction(_:)))
+        view.addGestureRecognizer(pan)
+    }
+    
+    // 修复视频地址
+    private func fixUrl(_ raw: String) -> URL? {
+        var fixed = raw.replacingOccurrences(of: "https:/", with: "https://")
         fixed = fixed.trimmingCharacters(in: .whitespacesAndNewlines)
-        fixed = fixed.replacingOccurrences(of: "\"", with: "")
-        fixed = fixed.replacingOccurrences(of: "\\", with: "")
-        
-        // 3. 补充视频后缀（如果没有）
-        if !fixed.lowercased().contains(".mp4") && !fixed.lowercased().contains(".m3u8") {
-            fixed += ".mp4" // 尝试补充后缀
-        }
-        
-        log = "✅ 修复后地址:\n\(fixed.prefix(100))"
         return URL(string: fixed)
     }
     
-    private func loadVideo() {
-        isLoading = true
-        log = "请求接口中..."
-        
-        guard let url = URL(string: api) else {
-            log = "❌ 接口URL无效"
-            isLoading = false
+    // 加载接口视频
+    private func loadApiVideo() {
+        updateLog("请求接口: \(apiUrl.prefix(50))")
+        guard let url = URL(string: apiUrl) else {
+            updateLog("❌ 接口URL无效")
             return
         }
         
-        // 网络配置
         let config = URLSessionConfiguration.default
-        config.httpAdditionalHeaders = [
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-        ]
+        config.httpAdditionalHeaders = ["User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/132.0.0.0 Safari/537.36"]
         let session = URLSession(configuration: config)
         
-        session.dataTask(with: url) { data, _, err in
+        session.dataTask(with: url) { [weak self] data, _, err in
+            guard let self = self else { return }
+            
             DispatchQueue.main.async {
-                isLoading = false
-                
                 if let err = err {
-                    log = "❌ 网络错误: \(err.localizedDescription)"
+                    self.updateLog("❌ 网络错误: \(err.localizedDescription)")
                     return
                 }
                 
                 guard let data = data else {
-                    log = "❌ 接口返回空"
+                    self.updateLog("❌ 接口返回空")
                     return
                 }
                 
                 // 解析JSON
                 struct Resp: Codable { let code: Int; let data: String }
                 if let res = try? JSONDecoder().decode(Resp.self, from: data), res.code == 200 {
-                    log = "✅ 接口返回地址:\n\(res.data.prefix(100))"
+                    self.updateLog("✅ 接口返回地址:\n\(res.data.prefix(80))")
                     
-                    // 修复视频地址
-                    guard let videoUrl = fixVideoUrl(res.data) else {
-                        log = "❌ 修复后地址仍无效"
+                    // 修复地址
+                    guard let videoUrl = self.fixUrl(res.data) else {
+                        self.updateLog("❌ 地址修复失败")
                         return
                     }
                     
-                    // 播放（兼容加密链接）
-                    let playerItem = AVPlayerItem(url: videoUrl)
-                    // 强制允许跨域/加密播放
-                    playerItem.preferredForwardBufferDuration = 10
-                    player.replaceCurrentItem(with: playerItem)
+                    // 🔥 核心修复：创建带缓冲监听的播放项
+                    self.playerItem = AVPlayerItem(url: videoUrl)
                     
-                    // 延迟播放，确保加载完成
-                    DispatchQueue.main.asyncAfter(deadline: .now()+1) {
-                        player.play()
-                        log = "▶️ 正在播放！"
-                    }
+                    // 监听缓冲状态（有缓冲才播放）
+                    self.playerItem.addObserver(self, forKeyPath: "status", options: [.new, .old], context: nil)
+                    self.playerItem.addObserver(self, forKeyPath: "loadedTimeRanges", options: [.new], context: nil)
+                    
+                    // 替换播放项（不立即播放）
+                    self.player.replaceCurrentItem(with: self.playerItem)
+                    self.updateLog("✅ 等待视频缓冲...")
                 } else {
-                    log = "❌ JSON解析失败"
+                    self.updateLog("❌ JSON解析失败")
                 }
             }
         }.resume()
     }
-}
-
-// 播放层（强制渲染）
-struct VideoLayerView: UIViewRepresentable {
-    let player: AVPlayer
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: UIScreen.main.bounds)
-        view.backgroundColor = .black
+    
+    // 监听播放器状态（核心！有缓冲才播放）
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        guard let item = object as? AVPlayerItem else { return }
         
-        let playerLayer = AVPlayerLayer(player: player)
-        playerLayer.frame = view.bounds
-        playerLayer.videoGravity = .resizeAspectFill
-        playerLayer.contentsGravity = .resizeAspectFill
-        view.layer.addSublayer(playerLayer)
-        
-        // 强制刷新图层
-        view.layer.displayIfNeeded()
-        return view
-    }
-    func updateUIView(_ uiView: UIView, context: Context) {
-        // 实时更新播放器状态
-        if let layer = uiView.layer.sublayers?.first as? AVPlayerLayer {
-            layer.player = player
+        // 监听播放状态
+        if keyPath == "status" {
+            switch item.status {
+            case .readyToPlay:
+                updateLog("✅ 视频解码完成，等待缓冲...")
+            case .failed:
+                updateLog("❌ 视频解码失败: \(item.error?.localizedDescription ?? "未知错误")")
+            case .unknown:
+                updateLog("⏳ 视频状态未知，加载中...")
+            @unknown default: break
+            }
         }
+        
+        // 监听缓冲（有缓冲才播放）
+        if keyPath == "loadedTimeRanges" {
+            let loadedTimeRanges = item.loadedTimeRanges
+            if !loadedTimeRanges.isEmpty {
+                // 有缓冲了，强制播放 + 刷新图层
+                player.play()
+                playerLayer.frame = view.bounds // 强制刷新图层
+                view.layer.displayIfNeeded() // 强制渲染
+                updateLog("▶️ 正在播放！缓冲完成")
+            }
+        }
+    }
+    
+    // 点击暂停/播放
+    @objc private func tapAction() {
+        if player.timeControlStatus == .playing {
+            player.pause()
+            updateLog("⏸️ 已暂停")
+        } else {
+            player.play()
+            updateLog("▶️ 继续播放")
+        }
+    }
+    
+    // 下滑刷新
+    @objc private func panAction(_ pan: UIPanGestureRecognizer) {
+        let translation = pan.translation(in: view)
+        if pan.state == .ended && translation.y < -120 {
+            updateLog("🔄 下滑刷新视频...")
+            loadApiVideo()
+        }
+    }
+    
+    // 更新日志
+    private func updateLog(_ text: String) {
+        DispatchQueue.main.async {
+            self.logLabel.text = text
+        }
+    }
+    
+    // 释放监听
+    deinit {
+        playerItem?.removeObserver(self, forKeyPath: "status")
+        playerItem?.removeObserver(self, forKeyPath: "loadedTimeRanges")
     }
 }
