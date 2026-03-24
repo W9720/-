@@ -4,6 +4,18 @@ import UIKit
 import AVFoundation
 import Foundation
 
+// iOS版本兼容扩展
+extension View {
+    @ViewBuilder
+    func scrollContentBackgroundHidden() -> some View {
+        if #available(iOS 16.0, *) {
+            self.scrollContentBackground(.hidden)
+        } else {
+            self
+        }
+    }
+}
+
 // MARK: - KVO 时长监听封装类（解决 override 关键字报错）
 class DurationObserver: NSObject {
     private let onDurationReady: (Double) -> Void
@@ -168,9 +180,9 @@ struct SplashView: View {
     
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(red: 1.0, green: 0.18, blue: 0.33).opacity(0.9), 
-                                   Color(red: 0.55, green: 0.0, blue: 0.55).opacity(0.9)], 
-                          startPoint: .top, 
+            LinearGradient(colors: [Color(red: 1.0, green: 0.18, blue: 0.33).opacity(0.9),
+                                   Color(red: 0.55, green: 0.0, blue: 0.55).opacity(0.9)],
+                          startPoint: .top,
                           endPoint: .bottom)
                 .ignoresSafeArea()
             
@@ -314,7 +326,7 @@ struct GirlVideoPlayerView: View {
                 HStack {
                     Spacer()
                     
-                    ZStack {
+                    Z {
                         Circle()
                             .stroke(Color.gray.opacity(0.5), lineWidth: 3)
                             .frame(width: 44, height: 44)
@@ -426,9 +438,9 @@ struct GirlVideoPlayerView: View {
                     currentTime = newProgress * totalDuration
                 }
                 .onEnded { _ in
-                    guard totalDuration > 0, let player = player else { 
+                    guard totalDuration > 0, let player = player else {
                         isDraggingProgress = false
-                        return 
+                        return
                     }
                     
                     let targetTime = CMTime(seconds: currentTime, preferredTimescale: 1000)
@@ -815,82 +827,93 @@ struct DownloadedVideosView: View {
     @State private var showPlayer = false
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                
-                if downloadedVideos.isEmpty {
-                    VStack(spacing: 20) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray.opacity(0.5))
-                        Text("暂无下载视频")
-                            .foregroundColor(.gray.opacity(0.8))
-                            .font(.title3)
-                        Text("在播放页点击下载按钮保存视频")
-                            .foregroundColor(.gray.opacity(0.6))
-                            .font(.caption)
-                    }
-                } else {
-                    List {
-                        ForEach(downloadedVideos, id: \.self) { url in
-                            HStack {
-                                Image(systemName: "film")
-                                    .foregroundColor(.red)
-                                    .padding(.trailing, 10)
+        if #available(iOS 16.0, *) {
+            NavigationStack {
+                contentView
+            }
+        } else {
+            NavigationView {
+                contentView
+            }
+            .navigationViewStyle(.stack)
+        }
+    }
+    
+    private var contentView: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            if downloadedVideos.isEmpty {
+                VStack(spacing: 20) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(.gray.opacity(0.5))
+                    Text("暂无下载视频")
+                        .foregroundColor(.gray.opacity(0.8))
+                        .font(.title3)
+                    Text("在播放页点击下载按钮保存视频")
+                        .foregroundColor(.gray.opacity(0.6))
+                        .font(.caption)
+                }
+            } else {
+                List {
+                    ForEach(downloadedVideos, id: \.self) { url in
+                        HStack {
+                            Image(systemName: "film")
+                                .foregroundColor(.red)
+                                .padding(.trailing, 10)
+                            
+                            VStack(alignment: .leading) {
+                                Text(url.lastPathComponent)
+                                    .foregroundColor(.white)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
                                 
-                                VStack(alignment: .leading) {
-                                    Text(url.lastPathComponent)
-                                        .foregroundColor(.white)
-                                        .font(.subheadline)
-                                        .lineLimit(1)
-                                    
-                                    Text(getFileSize(url: url))
-                                        .foregroundColor(.gray)
-                                        .font(.caption)
-                                }
-                                
-                                Spacer()
-                                
-                                Button {
-                                    deleteVideo(url: url)
-                                } label: {
-                                    Image(systemName: "trash.fill")
-                                        .foregroundColor(.red)
-                                }
+                                Text(getFileSize(url: url))
+                                    .foregroundColor(.gray)
+                                    .font(.caption)
                             }
-                            .onTapGesture {
-                                selectedVideoUrl = url
-                                showPlayer = true
+                            
+                            Spacer()
+                            
+                            Button {
+                                deleteVideo(url: url)
+                            } label: {
+                                Image(systemName: "trash.fill")
+                                    .foregroundColor(.red)
                             }
                         }
+                        .onTapGesture {
+                            selectedVideoUrl = url
+                            showPlayer = true
+                        }
                     }
-                    .listStyle(.plain)
-                    .background(Color.black)
-                    .scrollContentBackground(.hidden)
                 }
+                .listStyle(.plain)
+                .background(Color.black)
+                .scrollContentBackgroundHidden()
             }
-            .navigationTitle("我的下载")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                Button {
-                    deleteAllVideos()
-                } label: {
-                    Text("清空全部")
-                        .foregroundColor(.red)
-                }
-                .disabled(downloadedVideos.isEmpty)
+        }
+        .navigationTitle("我的下载")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            Button {
+                deleteAllVideos()
+            } label: {
+                Text("清空全部")
+                    .foregroundColor(.red)
             }
-            .onAppear {
-                loadDownloadedVideos()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .downloadCompleted)) { _ in
-                loadDownloadedVideos()
-            }
-            .fullScreenCover(isPresented: $showPlayer) {
-                if let url = selectedVideoUrl {
-                    OfflineVideoPlayerView(videoUrl: url)
-                }
+            .disabled(downloadedVideos.isEmpty)
+        }
+        .onAppear {
+            loadDownloadedVideos()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .downloadCompleted)) { _ in
+            loadDownloadedVideos()
+        }
+        .fullScreenCover(isPresented: $showPlayer) {
+            if let url = selectedVideoUrl {
+                OfflineVideoPlayerView(videoUrl: url)
             }
         }
     }
@@ -940,86 +963,97 @@ struct PlayHistoryView: View {
     @State private var showPlayer = false
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                
-                if historyManager.historyItems.isEmpty {
-                    VStack(spacing: 20) {
-                        Image(systemName: "clock.arrow.circlepath")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray.opacity(0.5))
-                        Text("暂无播放历史")
-                            .foregroundColor(.gray.opacity(0.8))
-                            .font(.title3)
-                        Text("播放视频后会自动保存历史记录")
-                            .foregroundColor(.gray.opacity(0.6))
-                            .font(.caption)
-                    }
-                } else {
-                    List {
-                        ForEach(historyManager.historyItems) { item in
-                            HStack {
-                                Image(systemName: "play.rectangle")
-                                    .foregroundColor(.red)
-                                    .padding(.trailing, 10)
+        if #available(iOS 16.0, *) {
+            NavigationStack {
+                contentView
+            }
+        } else {
+            NavigationView {
+                contentView
+            }
+            .navigationViewStyle(.stack)
+        }
+    }
+    
+    private var contentView: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            if historyManager.historyItems.isEmpty {
+                VStack(spacing: 20) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 60))
+                        .foregroundColor(.gray.opacity(0.5))
+                    Text("暂无播放历史")
+                        .foregroundColor(.gray.opacity(0.8))
+                        .font(.title3)
+                    Text("播放视频后会自动保存历史记录")
+                        .foregroundColor(.gray.opacity(0.6))
+                        .font(.caption)
+                }
+            } else {
+                List {
+                    ForEach(historyManager.historyItems) { item in
+                        HStack {
+                            Image(systemName: "play.rectangle")
+                                .foregroundColor(.red)
+                                .padding(.trailing, 10)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.fileName)
+                                    .foregroundColor(.white)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
                                 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(item.fileName)
-                                        .foregroundColor(.white)
-                                        .font(.subheadline)
-                                        .lineLimit(1)
+                                HStack {
+                                    Text("播放时间：\(item.formattedTime)")
+                                        .foregroundColor(.gray)
+                                        .font(.caption)
                                     
-                                    HStack {
-                                        Text("播放时间：\(item.formattedTime)")
-                                            .foregroundColor(.gray)
-                                            .font(.caption)
-                                        
-                                        Spacer()
-                                        
-                                        Text("进度：\(formatTime(item.playbackPosition))")
-                                            .foregroundColor(.red.opacity(0.8))
-                                            .font(.caption2)
-                                    }
-                                }
-                                
-                                Spacer()
-                                
-                                Button {
-                                    historyManager.deleteHistory(item: item)
-                                } label: {
-                                    Image(systemName: "trash.fill")
-                                        .foregroundColor(.red)
-                                        .font(.system(size: 16))
+                                    Spacer()
+                                    
+                                    Text("进度：\(formatTime(item.playbackPosition))")
+                                        .foregroundColor(.red.opacity(0.8))
+                                        .font(.caption2)
                                 }
                             }
-                            .padding(.vertical, 8)
-                            .onTapGesture {
-                                selectedVideoUrl = item.videoUrl
-                                showPlayer = true
+                            
+                            Spacer()
+                            
+                            Button {
+                                historyManager.deleteHistory(item: item)
+                            } label: {
+                                Image(systemName: "trash.fill")
+                                    .foregroundColor(.red)
+                                    .font(.system(size: 16))
                             }
                         }
+                        .padding(.vertical, 8)
+                        .onTapGesture {
+                            selectedVideoUrl = item.videoUrl
+                            showPlayer = true
+                        }
                     }
-                    .listStyle(.plain)
-                    .background(Color.black)
-                    .scrollContentBackground(.hidden)
                 }
+                .listStyle(.plain)
+                .background(Color.black)
+                .scrollContentBackgroundHidden()
             }
-            .navigationTitle("播放历史")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                Button {
-                    historyManager.clearAllHistory()
-                } label: {
-                    Text("清空全部")
-                        .foregroundColor(.red)
-                }
-                .disabled(historyManager.historyItems.isEmpty)
+        }
+        .navigationTitle("播放历史")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            Button {
+                historyManager.clearAllHistory()
+            } label: {
+                Text("清空全部")
+                    .foregroundColor(.red)
             }
-            .fullScreenCover(isPresented: $showPlayer) {
-                if let urlString = selectedVideoUrl, let url = URL(string: urlString) {
-                    HistoryVideoPlayerView(videoUrl: url)
-                }
+            .disabled(historyManager.historyItems.isEmpty)
+        }
+        .fullScreenCover(isPresented: $showPlayer) {
+            if let urlString = selectedVideoUrl, let url = URL(string: urlString) {
+                HistoryVideoPlayerView(videoUrl: url)
             }
         }
     }
@@ -1207,7 +1241,6 @@ struct HistoryVideoPlayerView: View {
                 }
         )
         .preferredColorScheme(.dark)
-    }
 }
 
 // MARK: - 离线视频播放页
@@ -1362,9 +1395,9 @@ struct OfflineVideoPlayerView: View {
                     currentTime = newProgress * totalDuration
                 }
                 .onEnded { _ in
-                    guard totalDuration > 0, let player = player else { 
+                    guard totalDuration > 0, let player = player else {
                         isDraggingProgress = false
-                        return 
+                        return
                     }
                     
                     let targetTime = CMTime(seconds: currentTime, preferredTimescale: 1000)
