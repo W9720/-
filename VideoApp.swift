@@ -243,6 +243,7 @@ struct GirlVideoPlayerView: View {
     @State private var showDownloadToast = false
     
     @EnvironmentObject private var historyManager: PlayHistoryManager
+    @Environment(\.presentationMode) var presentationMode // 返回按钮
     
     @State private var currentTime: Double = 0.0
     @State private var totalDuration: Double = 0.0
@@ -284,18 +285,64 @@ struct GirlVideoPlayerView: View {
             }
             
             VStack {
+                HStack {
+                    Button(action: {
+                        presentationMode.wrappedValue.dismiss()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.black.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                    .padding(.leading, 20)
+                    
+                    Spacer()
+                }
+                .padding(.top, 40)
+                
+                Spacer()
+                
+                // 下载按钮
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        
+                        ZStack {
+                            Circle()
+                                .stroke(Color.gray.opacity(0.5), lineWidth: 3)
+                                .frame(width: 44, height: 44)
+                            
+                            Circle()
+                                .trim(from: 0, to: CGFloat(downloadModel.progress))
+                                .stroke(Color.red, lineWidth: 3)
+                                .frame(width: 44, height: 44)
+                                .rotationEffect(.degrees(-90))
+                                .opacity(downloadModel.isDownloading ? 1 : 0)
+                            
+                            Image(systemName: downloadModel.isCompleted ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.white)
+                                .opacity(downloadModel.isDownloading ? 0.5 : 1)
+                        }
+                        .onTapGesture {
+                            if let url = currentVideoUrl, !downloadModel.isDownloading {
+                                startDownload(url: url)
+                            }
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 20)
+                    }
+                }
+                
+                // 进度条（已移到底部 + 已删除红色进度条）
                 VStack(spacing: 8) {
                     ZStack(alignment: .leading) {
                         Rectangle()
                             .frame(height: 3)
                             .foregroundColor(.white.opacity(0.3))
                             .cornerRadius(1.5)
-                        
-                        Rectangle()
-                            .frame(width: CGFloat(progress) * UIScreen.main.bounds.width - 40, height: 3)
-                            .foregroundColor(.red)
-                            .cornerRadius(1.5)
-                            .animation(.linear, value: progress)
                         
                         Circle()
                             .frame(width: 8, height: 8)
@@ -318,46 +365,10 @@ struct GirlVideoPlayerView: View {
                     }
                     .padding(.horizontal, 20)
                 }
-                .padding(.top, 40)
+                .padding(.bottom, 10)
                 
-                Spacer()
-            }
-            
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    
-                    ZStack {
-                        Circle()
-                            .stroke(Color.gray.opacity(0.5), lineWidth: 3)
-                            .frame(width: 44, height: 44)
-                        
-                        Circle()
-                            .trim(from: 0, to: CGFloat(downloadModel.progress))
-                            .stroke(Color.red, lineWidth: 3)
-                            .frame(width: 44, height: 44)
-                            .rotationEffect(.degrees(-90))
-                            .opacity(downloadModel.isDownloading ? 1 : 0)
-                        
-                        Image(systemName: downloadModel.isCompleted ? "checkmark.circle.fill" : "arrow.down.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white)
-                            .opacity(downloadModel.isDownloading ? 0.5 : 1)
-                    }
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 20)
-                    .onTapGesture {
-                        if let url = currentVideoUrl, !downloadModel.isDownloading {
-                            startDownload(url: url)
-                        }
-                    }
-                }
-            }
-            
-            VStack {
-                Spacer()
-                HStack(spacing: 20) {
+                // 底部文字
+                VStack(spacing: 20) {
                     Text("富则入道而润其根 穷则观屏而勤其手")
                         .foregroundColor(.white.opacity(0.7))
                         .font(.caption)
