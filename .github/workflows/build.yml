@@ -10,47 +10,30 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate Xcode Project
+      
+      - name: Install Carthage & XcodeGen
         run: |
-          cat > project.yml << 'EOF'
-          name: VideoApp
-          options:
-            minimumOSVersion: 15.0
-          targets:
-            VideoApp:
-              type: application
-              platform: iOS
-              sources:
-                - path: .
-                  excludes:
-                    - .git
-                    - .github
-              settings:
-                CODE_SIGN_IDENTITY: ""
-                CODE_SIGNING_REQUIRED: NO
-                CODE_SIGNING_ALLOWED: NO
-                IPHONEOS_DEPLOYMENT_TARGET: 15.0
-                PRODUCT_NAME: VideoApp
-                EXECUTABLE_NAME: VideoApp
-                PRODUCT_BUNDLE_IDENTIFIER: com.video.app
-                SWIFT_VERSION: 5.0
-                TARGETED_DEVICE_FAMILY: 1
-          EOF
-          xcodegen generate
-
-      - name: Build
-        run: xcodebuild build -scheme VideoApp -destination 'generic/platform=iOS' -quiet
-
+          brew install carthage xcodegen
+          
+      - name: Download IJKPlayer Framework
+        run: |
+          mkdir -p Carthage/Build/iOS
+          curl -L -o IJKMediaFramework.zip "https://github.com/bilibili/ijkplayer/releases/download/v0.8.8/IJKMediaFramework.framework.zip"
+          unzip IJKMediaFramework.zip -d Carthage/Build/iOS/
+          
+      - name: Generate Xcode Project
+        run: xcodegen generate
+          
+      - name: Build App
+        run: xcodebuild build -scheme VideoApp -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -quiet
+          
       - name: Make IPA
         run: |
           mkdir -p Payload
           cp -r ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphoneos/VideoApp.app Payload/
+          cp -r Carthage/Build/iOS/IJKMediaFramework.framework Payload/VideoApp.app/Frameworks/
           zip -r VideoApp-TrollStore.ipa Payload/
-
+          
       - uses: actions/upload-artifact@v4
         with:
           name: VideoApp-TrollStore
