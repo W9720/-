@@ -31,7 +31,7 @@ struct SplashView: View {
                 Image(systemName: "sparkles.fill")
                     .font(.system(size: 60))
                     .foregroundColor(.white)
-                Text("欢迎使用")
+                Text("人终将为年少不可得之物而困其一生")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
@@ -85,7 +85,7 @@ struct GirlVideoPlayerView: View {
                 HStack(spacing: 20) {
                     Image(systemName: "arrow.down.circle.fill")
                         .foregroundColor(.white.opacity(0.7))
-                    Text("下滑刷新 | 点击暂停/播放")
+                    Text("富则入道而润其根 穷则观屏而勤其手")
                         .foregroundColor(.white.opacity(0.7))
                         .font(.caption)
                 }
