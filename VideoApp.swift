@@ -314,7 +314,7 @@ struct GirlVideoPlayerView: View {
     
     @State private var durationObserver: DurationObserver?
     
-    let girlVideoApi = "https://tucdn.wpon.cn/api-girl/index.php?wpon=json"
+    let girlVideoApi = "https://e1q1fh.4408.me/vid/26287.html#"
     let videoCoverImage = "https://cdn.jsdelivr.net/gh/iosdevdemo/video-resource/girl-cover.jpg"
     
     var body: some View {
